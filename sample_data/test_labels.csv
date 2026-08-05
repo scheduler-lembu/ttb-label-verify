@@ -1,0 +1,11 @@
+image_filename,brand,alcohol_content,warning,class_type,net_contents,producer,country_of_origin
+label_01_compliant.png,Old Tom Distillery,45%,,Kentucky Straight Bourbon Whiskey,750 mL,"Old Tom Distillery, Louisville, KY",
+label_02_brand_case.png,Stone's Throw,40%,,Gin,750 mL,"Stone's Throw Distillers, Portland, OR",
+label_03_proof_only.png,Iron Gate Whiskey,45%,,Straight Rye Whiskey,750 mL,"Iron Gate Distilling, Nashville, TN",
+label_04_abv_mismatch.png,Cedar Ridge Vodka,45%,,Vodka,750 mL,"Cedar Ridge Spirits, Swisher, IA",
+label_05_beer_no_abv.png,Harbor Light Lager,,,Malt Beverage,12 fl oz,"Harbor Light Brewing, Seattle, WA",
+label_06_warning_titlecase.png,Maple Hill Reserve,43%,,Blended Whiskey,750 mL,"Maple Hill Distillery, Burlington, VT",
+label_07_warning_altered.png,Silver Creek Gin,47%,,London Dry Gin,750 mL,"Silver Creek Spirits, Boulder, CO",
+label_08_warning_missing.png,Copper Kettle Bourbon,50%,,Kentucky Straight Bourbon Whiskey,750 mL,"Copper Kettle Distillery, Bardstown, KY",
+label_09_warning_tiny.png,Founders Oak Rum,40%,,Aged Rum,750 mL,"Founders Oak Distillers, Key West, FL",
+label_10_degraded.png,Old Tom Distillery,45%,,Kentucky Straight Bourbon Whiskey,750 mL,"Old Tom Distillery, Louisville, KY",

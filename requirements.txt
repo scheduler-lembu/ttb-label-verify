@@ -15,3 +15,4 @@ pandas
 python-dotenv
 pytest
 sse-starlette
+Pillow
