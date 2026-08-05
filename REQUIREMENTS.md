@@ -92,7 +92,10 @@ consistent with the English-only scope (OOS-04 / MA-5).
 
 **Acceptance detail for MR-04/05:** the extracted warning is normalized only for
 whitespace, then compared character-for-character to the canonical text; any
-wording change, omission, or a non-all-caps prefix returns FAIL.
+wording change, omission, or a non-all-caps prefix returns FAIL. Whitespace
+variation *within the prefix* (a line break or extra spaces between GOVERNMENT and
+WARNING) does not by itself fail the all-caps check — only a genuine letter-case
+difference fails.
 
 **Note on MR-06:** exact text and all-caps checks (MR-04/05) work from OCR text
 alone and are **Must**. Bold-weight and font-size/"buried text" detection require

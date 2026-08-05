@@ -170,6 +170,26 @@ def test_warning_empty_needs_review():
     assert match_warning(None, None).verdict == ResultState.NEEDS_REVIEW
 
 
+def test_warning_linebroken_prefix_passes():
+    """A correctly all-caps prefix wrapped across a line break -> PASS (not a caps failure)."""
+    line_broken = CANONICAL_GOVERNMENT_WARNING.replace(
+        "GOVERNMENT WARNING", "GOVERNMENT\nWARNING", 1
+    )
+    r = match_warning(None, line_broken)
+    assert r.verdict == ResultState.PASS
+    assert r.reason == ResultReason.MATCH
+
+
+def test_warning_double_space_prefix_passes():
+    """A correctly all-caps prefix with an extra space -> PASS."""
+    double_space = CANONICAL_GOVERNMENT_WARNING.replace(
+        "GOVERNMENT WARNING", "GOVERNMENT  WARNING", 1
+    )
+    r = match_warning(None, double_space)
+    assert r.verdict == ResultState.PASS
+    assert r.reason == ResultReason.MATCH
+
+
 def test_canonical_text_matches_handoff_verbatim():
     """Guard: the stored canonical string is byte-for-byte the sourced text."""
     expected = (

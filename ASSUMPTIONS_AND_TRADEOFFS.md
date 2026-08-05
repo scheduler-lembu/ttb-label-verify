@@ -119,6 +119,10 @@ limitation as we build, so the final README writeup is already done and every
    review, not silently mis-matched (English-only boundary).
 10. **Every result carries a reason code** enabling triage/grouping of reviews
     and failures.
+11. **The all-caps prefix check is whitespace-tolerant:** the matched
+    `GOVERNMENT WARNING` prefix is whitespace-normalized before the case
+    comparison, so a correctly-capitalized prefix that wraps across lines is not
+    false-failed. Case remains strict (title case fails).
 
 ---
 

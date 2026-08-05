@@ -222,7 +222,8 @@ def match_warning(expected: "str | None", extracted: "str | None") -> FieldResul
             reason=ResultReason.WARNING_PREFIX_MISSING,
             note="warning prefix missing",
         )
-    if m.group(0) != "GOVERNMENT WARNING":
+    prefix_norm = re.sub(r"\s+", " ", m.group(0))
+    if prefix_norm != "GOVERNMENT WARNING":
         return FieldResult(
             field="warning",
             expected=CANONICAL_GOVERNMENT_WARNING,
