@@ -1,0 +1,18 @@
+# Fly.io deployment placeholder for the TTB label verification prototype.
+#
+# Minimal placeholder only — real app name, region, and secrets are filled in at
+# deploy time (a LATER phase). Not deployed in this pass. The same container
+# image also targets TTB's Azure tenant for production (see ARCHITECTURE.md).
+
+app = "ttb-label-verify"        # placeholder; set the real app name at deploy time
+primary_region = ""             # placeholder; choose at deploy time
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0

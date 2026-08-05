@@ -1,0 +1,80 @@
+/*
+ * style.css — minimal, high-contrast, large-font styling (scaffold only).
+ *
+ * Single responsibility: make the one page usable by a non-technical,
+ * first-time user with no training (NFR-03). Large touch/click targets, high
+ * contrast, big legible type, one obvious primary action. Intentionally plain;
+ * no framework. Final visual polish happens in a later phase.
+ */
+
+:root {
+  --fg: #12181f;
+  --bg: #ffffff;
+  --accent: #0b5fff;
+  --pass: #1a7f37;
+  --fail: #b42318;
+  --review: #9a6700;
+  --border: #c8ced6;
+  --font: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 20px;          /* large default for readability */
+  line-height: 1.5;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+.page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+}
+
+h1 { font-size: 2.25rem; margin: 0 0 0.25rem; }
+.tagline { color: #48505a; margin: 0 0 2rem; }
+
+/* Big, obvious upload zone */
+.upload-zone {
+  border: 3px dashed var(--border);
+  border-radius: 14px;
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  cursor: pointer;
+}
+.upload-hint { font-size: 1.15rem; margin: 0 0 1rem; }
+
+/* One primary button, large target */
+.primary-button {
+  display: block;
+  width: 100%;
+  margin: 1.5rem 0 0;
+  padding: 1.1rem 1.5rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+}
+.primary-button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Results table */
+.results { margin-top: 2.5rem; }
+#results-table { width: 100%; border-collapse: collapse; }
+#results-table th,
+#results-table td {
+  text-align: left;
+  padding: 0.85rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Verdict colors (applied to result cells later) */
+.state-PASS { color: var(--pass); font-weight: 700; }
+.state-FAIL { color: var(--fail); font-weight: 700; }
+.state-NEEDS_REVIEW { color: var(--review); font-weight: 700; }

@@ -1,0 +1,54 @@
+<!--
+  index.html — the ONE page (scaffold markup only; no working logic).
+
+  Single responsibility: present a dead-simple UI operable by a non-technical,
+  first-time user with no training (NFR-03; the "73-year-old / no hunting for
+  buttons" benchmark): one big upload zone, one primary button, one results
+  table area. Batch results are appended row-by-row via SSE (see static/app.js).
+
+  This is a static placeholder. No Jinja variables are wired and no logic runs
+  in this pass.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TTB Label Verification</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="page">
+    <h1>Label Verification</h1>
+    <p class="tagline">Upload a label image and its expected details. We check each field.</p>
+
+    <!-- Single big, obvious upload zone -->
+    <section class="upload-zone" aria-label="Upload a label">
+      <p class="upload-hint">Drop a label image here, or click to choose a file.</p>
+      <input type="file" id="label-file" accept="image/*" />
+    </section>
+
+    <!-- One primary action -->
+    <button type="button" id="verify-button" class="primary-button" disabled>
+      Verify Label
+    </button>
+
+    <!-- Results table area (populated later; batch rows stream in via SSE) -->
+    <section class="results" aria-label="Results" hidden>
+      <table id="results-table">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Expected</th>
+            <th>Found on label</th>
+            <th>Result</th>
+          </tr>
+        </thead>
+        <tbody><!-- rows appended by app.js --></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m py_compile app/*.py app/extraction/*.py app/matching/*.py tests/*.py)"
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+# Python dependencies for the TTB label verification prototype.
+#
+# This pass installs only the web/app framework and the deterministic-matching
+# toolkit. Provider SDKs and the local-OCR engine are intentionally NOT listed
+# here — they are added in a LATER phase when extraction is implemented.
+
+fastapi
+uvicorn[standard]
+pydantic
+python-multipart
+jinja2
+httpx
+rapidfuzz
+pandas
+python-dotenv
+pytest
+sse-starlette
