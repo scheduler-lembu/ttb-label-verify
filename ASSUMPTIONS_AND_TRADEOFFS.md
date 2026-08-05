@@ -45,6 +45,9 @@ limitation as we build, so the final README writeup is already done and every
 | D-9 | **Auth** | None (or a trivial shared password if you want to limit access) | It's a public demo POC | Anyone with the URL can use it | SSO / federal identity |
 | D-10 | **Stack** | Python + FastAPI, deterministic matcher, minimal frontend, Docker, Fly.io | Async (good for batch), fast to build, strong AI ecosystem, simple deploy | Opinionated; not the only valid choice | Containerized into TTB's Azure |
 | D-11 | **UI** | One obvious page: big upload zone, one primary button, results as a clear table | 73-year-old / no-training benchmark | Fewer power-user features | Role-based richer UI |
+| D-12 | **Blank required field** | Empty required expected value → NEEDS_REVIEW (categorized), not PASS | Closes a false-PASS hole; makes the required flag meaningful | A little more review on incomplete entries | Form pre-validation; pull expected values from COLA |
+| D-13 | **Warning body strictness** | Exact characters incl. case (strict) | MR-04 says "character-for-character"; over-strict beats under-strict on the one exact field | Re-cased/reformatted-but-correct warnings FAIL (false-FAIL); visible + overridable | Same; optional case-insensitive body mode |
+| D-14 | **Review reason taxonomy** | Every result carries a machine-readable reason code | Lets agents triage/group reviews ("all blanks", by field) — efficiency for 47 agents, esp. batch | Small enum to maintain | Same + filterable review-queue UI |
 
 ---
 
@@ -54,11 +57,14 @@ limitation as we build, so the final README writeup is already done and every
 |---|---|---|---|
 | MA-1 | **Application/expected data is entered into the app** (form for single, CSV for batch); it is **not** fetched from COLA. | There is no COLA integration; the expected values must come from somewhere. | Low — this is the stated scope. |
 | MA-2 | **The canonical Government Warning is stored as a verified constant**, sourced from the current regulation (27 CFR 16.21) — **not typed from memory**. | Exact match needs a trusted reference string; a single wrong word breaks the very check we're grading on. | High if the stored text is inaccurate → sourced/verified at build time. |
-| MA-3 | **Per-field match tolerances are fixed by rule** (brand = case/punctuation-insensitive; ABV = proof-equivalence; warning = exact). | "Match" is undefined without explicit tolerance rules. | Medium — rules are drawn straight from the interviews. |
+| MA-3 | **Per-field match tolerances are fixed by rule** (brand = case/punctuation-insensitive; ABV = proof-equivalence; warning = exact). Concrete thresholds (committed): brand fuzzy 90/75, supporting 85/70, ABV ±0.15% ABV. | "Match" is undefined without explicit tolerance rules. | Medium — rules are drawn straight from the interviews. |
 | MA-4 | **Batch pairing contract:** each image maps to one CSV row via a filename or ID column. | Something must tell the app which expected values go with which image. | Medium — mitigated by clear instructions + a downloadable CSV template. |
-| MA-5 | **English-language labels only** for the prototype. | Extraction/normalization rules are language-specific; scope must be bounded. | Low for the demo; flagged for confirmation (§F). |
+| MA-5 | **English-language labels only** for the prototype. | Extraction/normalization rules are language-specific; scope must be bounded. | Confirmed. English-only is implemented (the normalizer keeps a–z/0–9). Non-ASCII/accented values are detected and routed to NEEDS_REVIEW (special_character) rather than silently degraded. Risk: low. |
 | MA-6 | **Cloud AI is acceptable for the deployed prototype**, with a local/Azure path documented for production. | The prototype must run somewhere reachable; TTB's firewall only constrains *their* network, not our demo host. | Low — explicitly reconciled in D-1. |
 | MA-7 | **The deployed prototype is publicly reachable and effectively unauthenticated.** | Treasury must be able to open and test it without accounts (OOS-03). | Low for a POC; noted as a security trade-off (D-9). |
+| MA-8 | Warning is matched to the stored canonical constant, not the agent's input value. | MR-04 says "against the stored canonical". | Low — agents may expect their entry to matter; documented. |
+| MA-9 | "Exact" = exact characters including case in the body, not just wording. | Strictest defensible reading of MR-04 (D-13). | Medium — re-cased/reformatted-but-correct warnings FAIL; overridable. |
+| MA-10 | The extractor delivers each field (esp. the warning) as a clean, bounded value — no trailing text scooped in. | Exact-match assumes the warning field isn't polluted (e.g. "CONTAINS SULFITES"). | Medium — pushed onto HANDOFF #3's extraction prompt. |
 
 ---
 
@@ -78,6 +84,16 @@ limitation as we build, so the final README writeup is already done and every
   multiplies API calls; production would meter/queue this.
 - **Simplicity vs. features.** The UI is intentionally minimal to meet the
   no-training bar, at the cost of power-user conveniences.
+- **Literal-spec fidelity vs. real-world robustness:** matchers are built to the
+  letter of MR-01/02/04; beyond-spec cases (subset brand names, volume-unit
+  conversion) are deferred and documented, per CON-04.
+- **Strict warning → false-FAIL bias:** correctly-worded but re-cased/reformatted
+  warnings FAIL rather than pass. Consistent with recall-over-precision, but note
+  it produces false FAILs, not just reviews. Each is shown with
+  extracted-vs-canonical and is overridable.
+- **Determinism → no model fallback:** real-world coverage is exactly what we
+  encode; the deliberately-nasty test-label catalog is the safety net, not the
+  matcher.
 
 ---
 
@@ -99,6 +115,10 @@ limitation as we build, so the final README writeup is already done and every
 7. **English-only.** Non-English labels out of scope (OOS-04).
 8. **Cost not optimized.** Each verification is an API call; no caching/batching
    economics tuned for the prototype.
+9. **Accented/non-ASCII values** are detected and routed to a special_character
+   review, not silently mis-matched (English-only boundary).
+10. **Every result carries a reason code** enabling triage/grouping of reviews
+    and failures.
 
 ---
 
@@ -106,11 +126,13 @@ limitation as we build, so the final README writeup is already done and every
 
 | # | Question | My recommended default (proceeds if you say nothing) |
 |---|---|---|
-| Q-1 | **English-only** for the prototype? (MA-5) | Yes — English only. |
+| Q-1 | **English-only** for the prototype? (MA-5) | **Confirmed — English only.** |
 | Q-2 | **Batch input format:** CSV template + images matched by filename? | Yes — provide a downloadable CSV template with an `image_filename` column. |
 | Q-3 | Do you want the **soft font-size/bold "Needs Review" signal** (D-5), or drop it entirely to keep the core clean? | Include it as a soft signal only — it shows attention to the buried requirement without risking the core. |
 | Q-4 | Any need to **limit access** to the deployed demo (a shared password), or fully open? | Fully open for easy testing; add a shared password only if you'd prefer. |
 | Q-5 | Confirm **stack** (Python + FastAPI + cloud vision + Docker + Fly.io)? | Proceed as-is unless you object. |
+
+Decisions D-12 (blank→review) and D-13 (strict warning) resolved.
 
 ---
 

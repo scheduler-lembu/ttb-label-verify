@@ -61,6 +61,7 @@ plus a publicly testable deployed URL.
 | FR-10 | S | accept a **batch** of many label + application pairs in a single submission. | Demo | R16 |
 | FR-11 | S | produce a **per-item result** for every batch entry plus a **batch summary** (counts of pass / fail / needs-review). | Demo | R17 |
 | FR-12 | C | allow the agent to **override** an automated result (human-in-the-loop). | Demo | R19 |
+| FR-13 | S | categorize each NEEDS_REVIEW / FAIL result with a machine-readable reason code (blank, unreadable, borderline, special-character, warning-prefix, wording, mismatch, ...) to support triage and grouping. | Test | stakeholder efficiency |
 
 ---
 
@@ -74,13 +75,20 @@ the brand-vs-warning distinction is deliberate and must be preserved.
 | MR-01 | M | **Brand name** comparison is **case- and punctuation-insensitive** (normalized/fuzzy). `STONE'S THROW` shall match `Stone's Throw`. | Test | R10 |
 | MR-02 | M | **ABV/proof equivalence**: proof = 2 × ABV%. `45% Alc./Vol.` shall satisfy an expected `45%` **or** `90 proof`. | Test | R9 |
 | MR-03 | S | Where a beverage type **legitimately omits** ABV, absence shall not be recorded as a failure. | Test | R9b |
+
+> **Decided behavior (D-12):** a blank/absent ABV (nothing expected, nothing on
+> the label) → NEEDS_REVIEW with reason `blank_expected`, not PASS — which still
+> satisfies MR-03 ("absence shall not be recorded as a failure"), since a review
+> is not a failure. A human confirms whether the omission is legitimate.
 | MR-04 | M | **Government Warning** text shall be matched **exactly** (word-for-word) against the stored canonical TTB statement. | Test | R11 |
 | MR-05 | M | The `GOVERNMENT WARNING:` prefix shall be verified as **all caps**; title case (`Government Warning`) shall FAIL. | Test | R11, R12 |
 | MR-06 | C | The system shall attempt to detect **format evasion** on the warning — missing bold, disproportionately small font, or buried/tiny text — and FAIL such labels. | Test | R12 |
 
 **Acceptance detail for MR-01:** pairs differing only in letter case, apostrophes,
 hyphens, ampersand-vs-"and", or internal spacing return MATCH; a genuinely
-different brand returns FAIL.
+different brand returns FAIL. Values containing non-ASCII/accented characters that
+do not normalize to a match are routed to NEEDS_REVIEW (`special_character`),
+consistent with the English-only scope (OOS-04 / MA-5).
 
 **Acceptance detail for MR-04/05:** the extracted warning is normalized only for
 whitespace, then compared character-for-character to the canonical text; any

@@ -6,49 +6,53 @@ element later (e.g. TTB's proposed Alcohol Facts panel or an allergen
 disclosure) is **data, not a code rewrite** — you add a registry entry, not a
 new branch in the orchestrator.
 
-Scaffold pass: declare the rule-type vocabulary and the registry shape. No
-population logic, no behavior.
+Field keys MUST match the columns in ``sample_data/batch_template.csv``.
 """
 
 from __future__ import annotations
 
 from enum import Enum
 
+from pydantic import BaseModel
+
 
 class RuleType(str, Enum):
     """How a given field is compared. Maps to a matcher in ``matching.rules``.
 
-    FUZZY              -> match_brand      (case/punctuation-insensitive; MR-01)
-    ABV_EQUIVALENCE    -> match_abv        (proof = 2 x ABV%; MR-02/03)
-    EXACT_WARNING      -> match_warning    (char-for-char + all-caps prefix; MR-04/05)
-    PRESENT_NORMALIZED -> match_supporting (class/type, net contents, producer,
-                                            country of origin; FR-08)
+    BRAND      -> match_brand      (case/punctuation-insensitive; MR-01)
+    ABV        -> match_abv        (proof = 2 x ABV%; MR-02/03)
+    WARNING    -> match_warning    (char-for-char vs canonical + all-caps; MR-04/05)
+    SUPPORTING -> match_supporting (class/type, net contents, producer,
+                                    country of origin; FR-08)
     """
 
-    FUZZY = "fuzzy"
-    ABV_EQUIVALENCE = "abv_equivalence"
-    EXACT_WARNING = "exact_warning"
-    PRESENT_NORMALIZED = "present_normalized"
+    BRAND = "brand"
+    ABV = "abv"
+    WARNING = "warning"
+    SUPPORTING = "supporting"
 
 
-class FieldSpec:
-    """One entry in the registry.
+class FieldDef(BaseModel):
+    """One entry in the field registry."""
 
-    Intended attributes:
-        key: str            # stable identifier, e.g. "brand"
-        label: str          # human display name, e.g. "Brand Name"
-        rule: RuleType      # which matcher adjudicates this field
-        required: bool      # whether absence is itself a failure
-    """
-
-    # Stub only.
+    key: str
+    label: str
+    rule: RuleType
+    required: bool = True  # country_of_origin overrides to False (imports-only)
 
 
-def get_field_registry() -> "list[FieldSpec]":
-    """Return the ordered list of fields to verify.
-
-    Stub: real implementation returns the registry (brand, alcohol content,
-    government warning, and supporting fields) so the orchestrator can iterate
-    fields generically. No behavior this pass.
-    """
-    raise NotImplementedError
+# The ordered set of fields the app verifies. Keys mirror the batch CSV columns.
+FIELD_REGISTRY: list[FieldDef] = [
+    FieldDef(key="brand", label="Brand Name", rule=RuleType.BRAND),
+    FieldDef(key="alcohol_content", label="Alcohol Content", rule=RuleType.ABV),
+    FieldDef(key="warning", label="Government Warning", rule=RuleType.WARNING),
+    FieldDef(key="class_type", label="Class/Type", rule=RuleType.SUPPORTING),
+    FieldDef(key="net_contents", label="Net Contents", rule=RuleType.SUPPORTING),
+    FieldDef(key="producer", label="Producer Name/Address", rule=RuleType.SUPPORTING),
+    FieldDef(
+        key="country_of_origin",
+        label="Country of Origin",
+        rule=RuleType.SUPPORTING,
+        required=False,  # required only for imports
+    ),
+]
