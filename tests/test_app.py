@@ -23,8 +23,17 @@ def _blank_png() -> bytes:
     return buf.getvalue()
 
 
-def test_index_get_ok():
+def test_home_serves_the_app():
+    # The site home now serves the batch/triage app (Pipeline · Dashboard · History).
     r = client.get("/")
+    assert r.status_code == 200
+    assert "Run the demo batch" in r.text
+    assert 'data-nav="pipeline"' in r.text
+
+
+def test_single_label_page_kept_at_single():
+    # The single-label page is kept in code, unlinked, served at /single.
+    r = client.get("/single")
     assert r.status_code == 200
     assert "Verify label" in r.text
     assert "Brand Name" in r.text

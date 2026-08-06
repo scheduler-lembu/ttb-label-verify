@@ -40,6 +40,15 @@
   var listSearch = document.getElementById("list-search");
   var recordListEl = document.getElementById("record-list");
 
+  var pipelineView = document.getElementById("pipeline-view");
+  var dashboardView = document.getElementById("dashboard-view");
+  var historyView = document.getElementById("history-view");
+  var statCards = document.getElementById("stat-cards");
+  var historyChips = document.getElementById("history-chips");
+  var historySearch = document.getElementById("history-search");
+  var historyListEl = document.getElementById("history-list");
+  var navLinks = document.querySelectorAll(".site-header nav a[data-nav]");
+
   var notifBell = document.getElementById("notif-bell");
   var notifCount = document.getElementById("notif-count");
   var notifPanel = document.getElementById("notif-panel");
@@ -97,13 +106,15 @@
       attention: 0, flaggedTotal: 0,
       reviewedCleared: 0, rejected: 0, rejectedApps: [],
       buckets: {}, bucketOrder: [], apps: {},
-      records: { cleared: [], rejected: [] },
+      records: { cleared: [], rejected: [] }, decidedOrder: [],
       currentBucket: null, currentApp: null, reviewIndex: 0, reviewTotal: 0,
-      currentList: null,
+      currentList: null, historyChip: "all",
       notifications: [], notifUnread: 0,
     };
     recordCards.cleared = makeRecordCard("cleared", "Approved / Cleared", "i-check");
     recordCards.rejected = makeRecordCard("rejected", "Rejected", "i-x");
+    dashboardView.hidden = true; historyView.hidden = true; pipelineView.hidden = false;
+    setNavActive("pipeline");
     updateBell();
     resultsSec.hidden = false;
     summaryEl.textContent = "Starting…";
@@ -125,7 +136,22 @@
   function flash(msg) { flashEl.hidden = false; flashEl.textContent = msg; }
   function clearFlash() { flashEl.hidden = true; flashEl.textContent = ""; }
 
+  // --- Top-level views (Pipeline / Dashboard / History) + nav highlight ---
+  function showTopLevel(which) {
+    pipelineView.hidden = which !== "pipeline";
+    dashboardView.hidden = which !== "dashboard";
+    historyView.hidden = which !== "history";
+    setNavActive(which);
+  }
+  function setNavActive(which) {
+    Array.prototype.forEach.call(navLinks, function (a) {
+      a.classList.toggle("active", a.getAttribute("data-nav") === which);
+    });
+  }
+
   function showOverview() {
+    showTopLevel("pipeline");
+    if (!state) return;   // fresh landing — no batch yet
     reviewScreen.hidden = true; listScreen.hidden = true;
     bucketsEl.hidden = false; recordsSection.hidden = false;
     if (pendingFlash) { flash(pendingFlash); pendingFlash = null; } else { clearFlash(); }
@@ -149,19 +175,86 @@
     openList(type, highlight);
   }
   function renderRoute(route) {
-    if (!state) return;   // no batch yet — nothing to route to
     route = route || { view: "overview" };
+    if (route.view === "dashboard") { renderDashboard(); return; }
+    if (route.view === "history") { renderHistory(); return; }
     if (route.view === "bucket") {
+      if (!state) { showOverview(); return; }
       var b = state.buckets[route.id];
       if (b && b.appIds.length > 0) openBucket(route.id, route.start);
       else showOverview();
     } else if (route.view === "list") {
-      openList(route.type, route.highlight);
+      if (state) openList(route.type, route.highlight); else showOverview();
     } else {
       showOverview();
     }
   }
   window.addEventListener("popstate", function (ev) { renderRoute(ev.state); });
+
+  function goPipeline() { history.pushState({ view: "overview" }, "", "#"); showOverview(); }
+  function goDashboard() { history.pushState({ view: "dashboard" }, "", "#dashboard"); renderDashboard(); }
+  function goHistory() { history.pushState({ view: "history" }, "", "#history"); renderHistory(); }
+
+  // --- Dashboard (session-scoped, recomputed on view) ---
+  function renderDashboard() {
+    showTopLevel("dashboard");
+    var ingested = 0, autoCleared = 0, approvedByYou = 0, rejected = 0, outstanding = 0;
+    if (state) {
+      var apps = Object.keys(state.apps).map(function (k) { return state.apps[k]; });
+      ingested = apps.length;
+      autoCleared = state.records.cleared.filter(function (fn) { return state.apps[fn].recordBadge === "Auto-cleared"; }).length;
+      approvedByYou = state.records.cleared.filter(function (fn) { return state.apps[fn].recordBadge === "Approved by you"; }).length;
+      rejected = state.records.rejected.length;
+      outstanding = apps.filter(function (a) { return a.active && a.active.size > 0; }).length;
+    }
+    statCards.innerHTML = "";
+    if (ingested === 0) {
+      var msg = document.createElement("p"); msg.className = "record-empty";
+      msg.textContent = "Run a batch to see today's numbers.";
+      statCards.appendChild(msg);
+    }
+    [
+      { label: "Ingested (this session)", value: ingested, cls: "" },
+      { label: "Cleared automatically", value: autoCleared, cls: "stat-pass" },
+      { label: "Approved by you", value: approvedByYou, cls: "stat-pass" },
+      { label: "Rejected", value: rejected, cls: "stat-fail" },
+      { label: "Outstanding (in pipeline)", value: outstanding, cls: "stat-review" },
+    ].forEach(function (c) {
+      var card = document.createElement("div"); card.className = "stat-card " + c.cls;
+      var v = document.createElement("div"); v.className = "stat-value"; v.textContent = String(c.value);
+      var l = document.createElement("div"); l.className = "stat-label"; l.textContent = c.label;
+      card.appendChild(v); card.appendChild(l); statCards.appendChild(card);
+    });
+  }
+
+  // --- History / Archive (session-scoped): every decided application ---
+  function renderHistory(query, chip) {
+    showTopLevel("history");
+    chip = chip || (state && state.historyChip) || "all";
+    if (state) state.historyChip = chip;
+    Array.prototype.forEach.call(historyChips.querySelectorAll(".chip"), function (b) {
+      b.classList.toggle("active", b.getAttribute("data-chip") === chip);
+    });
+    var q = (query !== undefined && query !== null ? query : (historySearch.value || "")).trim().toLowerCase();
+    historyListEl.innerHTML = "";
+    var shown = 0;
+    if (state) {
+      state.decidedOrder.forEach(function (fn) {
+        var app = state.apps[fn];
+        if (!app || !app.record) return;
+        if (chip === "cleared" && app.record !== "cleared") return;
+        if (chip === "rejected" && app.record !== "rejected") return;
+        if (q && app.searchText.indexOf(q) === -1) return;
+        historyListEl.appendChild(makeListRow(app, null));
+        shown += 1;
+      });
+    }
+    if (shown === 0) {
+      var empty = document.createElement("p"); empty.className = "record-empty";
+      empty.textContent = (state && state.decidedOrder.length) ? "No matches." : "No decided applications yet.";
+      historyListEl.appendChild(empty);
+    }
+  }
   function checkCompletion() {
     if (state.flaggedTotal > 0 && state.attention === 0) {
       reviewScreen.hidden = true; listScreen.hidden = true;
@@ -227,12 +320,17 @@
   function routeToRecord(app, type, badge) {
     app.record = type; if (badge) app.recordBadge = badge;
     state.records[type].unshift(app.filename);   // most-recently-touched first
+    var d = state.decidedOrder.indexOf(app.filename);
+    if (d !== -1) state.decidedOrder.splice(d, 1);
+    state.decidedOrder.unshift(app.filename);     // History order (newest decision first)
     updateRecordCounts();
   }
   function removeFromRecord(app) {
     if (!app.record) return;
     var arr = state.records[app.record]; var i = arr.indexOf(app.filename);
     if (i !== -1) arr.splice(i, 1);
+    var d = state.decidedOrder.indexOf(app.filename);
+    if (d !== -1) state.decidedOrder.splice(d, 1);
     app.record = null; app.recordBadge = null; updateRecordCounts();
   }
 
@@ -283,6 +381,7 @@
   function openBucket(bucketId, startFilename) {
     var b = state.buckets[bucketId];
     if (!b || b.appIds.length === 0) return;
+    showTopLevel("pipeline");
     clearFlash();
     state.currentBucket = bucketId; state.reviewTotal = b.appIds.length;
     var idx = startFilename ? b.appIds.indexOf(startFilename) : 0;
@@ -363,6 +462,7 @@
     }
   }
   function openList(type, highlight) {
+    showTopLevel("pipeline");
     clearFlash();
     state.currentList = type;
     listTitle.textContent = type === "cleared" ? "Approved / Cleared" : "Rejected";
@@ -406,6 +506,7 @@
     updateRecordCounts(); updateSummary(true); updateReviewed();
     postNotification(app, resp);
     if (!listScreen.hidden && state.currentList) renderList(state.currentList, listSearch.value);
+    if (!historyView.hidden) renderHistory(historySearch.value, state.historyChip);
     checkCompletion();
   }
 
@@ -509,6 +610,25 @@
   if (listBack) listBack.addEventListener("click", function () { history.back(); });
   if (listSearch) listSearch.addEventListener("input", function () { renderList(state.currentList, this.value); });
   if (notifBell) notifBell.addEventListener("click", toggleNotifPanel);
+
+  // Top nav: Pipeline / Dashboard / History (client-side routing).
+  Array.prototype.forEach.call(navLinks, function (a) {
+    a.addEventListener("click", function (e) {
+      e.preventDefault();
+      var v = a.getAttribute("data-nav");
+      if (v === "dashboard") goDashboard();
+      else if (v === "history") goHistory();
+      else goPipeline();
+    });
+  });
+  if (historyChips) historyChips.addEventListener("click", function (e) {
+    var b = e.target.closest ? e.target.closest(".chip") : null;
+    if (!b) return;
+    renderHistory(historySearch.value, b.getAttribute("data-chip"));
+  });
+  if (historySearch) historySearch.addEventListener("input", function () {
+    renderHistory(this.value, state && state.historyChip);
+  });
 
   // Styled file pickers: reflect the chosen file(s) next to the button.
   var csvFile = document.getElementById("csv-file");

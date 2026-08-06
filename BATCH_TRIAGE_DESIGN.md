@@ -20,7 +20,12 @@
 > URL** (client-side history routing), so the browser **Back/Forward** buttons move between the overview
 > and each bucket; a hard refresh returns to the empty overview. The built-in demo also includes a few
 > deliberate **multi-flag** labels (wrong on two fields) so the multi-bucket workflow shows without an
-> upload. **The triage/record feature is now complete; deploy is next.**
+> upload. The app is now organized as **Pipeline · Dashboard · History** (the batch/triage app is the site
+> home): **Dashboard** shows this session's live counts (ingested / cleared / approved / rejected /
+> outstanding) and **History** is a searchable, filterable, re-ingestable archive of every decided
+> application — both session-scoped (production would persist and roll over by day). The single-label page
+> is kept in code but unlinked (reachable at `/single`). **The triage/record feature is now complete;
+> deploy is next.**
 
 ---
 

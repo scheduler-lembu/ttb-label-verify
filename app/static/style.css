@@ -357,3 +357,25 @@ body {
 .file-picker { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; }
 .file-picker .btn { flex: none; }
 .file-picked { font-size: 0.9rem; color: var(--muted); word-break: break-word; }
+
+/* --- Dashboard + History views (#16) --- */
+.view-panel { }
+.stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1rem; }
+.stat-card {
+  background: var(--card); border: 1px solid var(--border); border-left: 6px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow); padding: 1.3rem 1.4rem;
+}
+.stat-card.stat-pass { border-left-color: var(--pass-fg); }
+.stat-card.stat-fail { border-left-color: var(--fail-fg); }
+.stat-card.stat-review { border-left-color: var(--review-fg); }
+.stat-value { font-size: 2.6rem; font-weight: 800; line-height: 1; color: var(--fg); }
+.stat-label { margin-top: 0.5rem; font-size: 0.95rem; font-weight: 700; color: var(--muted); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+.chip {
+  padding: 0.5rem 1.1rem; font-size: 0.95rem; font-weight: 700; font-family: inherit; cursor: pointer;
+  color: var(--fg); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-pill);
+}
+.chip:hover { background: var(--panel); }
+.chip:focus-visible { outline: none; box-shadow: var(--focus); }
+.chip.active { color: #fff; background: var(--primary); border-color: var(--primary); }

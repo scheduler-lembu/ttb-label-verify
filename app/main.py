@@ -145,8 +145,24 @@ def _batch_item_payload(item, result: LabelResult):
     }
 
 
+def _batch_response(request: Request):
+    """Render the batch/triage app (the site home) with the demo count."""
+    try:
+        demo_count = len(get_application_source(get_settings()).list_applications())
+    except Exception:
+        demo_count = 0
+    return templates.TemplateResponse(request, "batch.html", {"demo_count": demo_count})
+
+
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
+async def home(request: Request):
+    # The batch/triage app is the site home (Pipeline · Dashboard · History).
+    return _batch_response(request)
+
+
+@app.get("/single", response_class=HTMLResponse)
+async def single_label_page(request: Request):
+    # The single-label page is kept in code but unlinked from the app nav.
     return _render(request)
 
 
@@ -198,11 +214,7 @@ async def verify_route(request: Request):
 
 @app.get("/batch", response_class=HTMLResponse)
 async def batch_page(request: Request):
-    try:
-        demo_count = len(get_application_source(get_settings()).list_applications())
-    except Exception:
-        demo_count = 0
-    return templates.TemplateResponse(request, "batch.html", {"demo_count": demo_count})
+    return _batch_response(request)
 
 
 @app.get("/template.csv")

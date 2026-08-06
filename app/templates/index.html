@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TTB Label Verification</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/static/style.css?v=14" />
+  <link rel="stylesheet" href="/static/style.css?v=16" />
 </head>
 <body>
   <svg class="svg-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -20,8 +20,7 @@
     <div class="wrap">
       <span class="brand"><svg class="icon"><use href="#i-shield"/></svg> TTB Label Verification</span>
       <nav>
-        <a href="/" class="active">Single label</a>
-        <a href="/batch">Batch</a>
+        <a href="/">&larr; Back to the app</a>
       </nav>
     </div>
   </header>
@@ -30,7 +29,6 @@
     <header class="head">
       <h1>Verify a single label</h1>
       <p class="tagline">Upload a label, enter what it should say, and check them against each other.</p>
-      <p><a class="back-link" href="/batch">Checking many labels at once? Use batch mode &rarr;</a></p>
     </header>
 
     <form class="verify-form" method="post" action="/verify" enctype="multipart/form-data" id="verify-form">
@@ -106,6 +104,6 @@
     {% endif %}
   </main>
 
-  <script src="/static/app.js?v=14"></script>
+  <script src="/static/app.js?v=16"></script>
 </body>
 </html>
