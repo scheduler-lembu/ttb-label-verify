@@ -58,6 +58,7 @@ VERDICT_LABELS = {
 # In-memory batch jobs (single-process prototype; dropped after streaming).
 BATCH_JOBS: dict = {}
 BATCH_TEMPLATE_PATH = "sample_data/batch_template.csv"
+FAVICON_PATH = "app/static/favicon.svg"
 
 
 def _short(text, limit=80):
@@ -142,6 +143,12 @@ async def index(request: Request):
 @app.get("/health")
 async def health():
     return JSONResponse({"status": "ok"})
+
+
+@app.get("/favicon.ico")
+async def favicon():
+    """Serve the SVG favicon (ends the /favicon.ico 404)."""
+    return FileResponse(FAVICON_PATH, media_type="image/svg+xml")
 
 
 @app.post("/verify", response_class=HTMLResponse)

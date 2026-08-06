@@ -157,6 +157,13 @@ limitation as we build, so the final README writeup is already done and every
 16. **Batch results stream via SSE and therefore require JavaScript** (the
     single-label page works without it). Batch jobs are held in memory and dropped
     after the stream completes — no persistence (D-8/CON-02).
+17. **Batch extraction now runs on BATCH_MODEL** (the cheap Luna tier) with an
+    in-memory image-hash dedup cache: an identical image is transcribed once per
+    process and reused, so repeated demo runs are near-free until restart. The
+    cache is in-memory only (no persistence, CON-02) and stores the EXTRACTION,
+    not the verdict, so results stay correct when the same image is checked against
+    different application data. Single-label stays on PRIMARY_MODEL (Terra) for
+    graded accuracy.
 
 ---
 

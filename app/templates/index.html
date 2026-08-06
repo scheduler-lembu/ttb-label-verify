@@ -4,12 +4,31 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TTB Label Verification</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
+  <svg class="svg-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 2.3V11c0 4.6-3 7.9-7 9.2-4-1.3-7-4.6-7-9.2V5.3L12 3z"/><path d="M8.7 12l2.3 2.3L15.4 9.6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3l9 16H3L12 3z"/><path d="M12 10v4"/><path d="M12 17.2v.2"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 16l5-4 4 3 3-2 6 5"/><circle cx="8.5" cy="9" r="1.4"/></symbol>
+  </svg>
+
+  <header class="site-header">
+    <div class="wrap">
+      <span class="brand"><svg class="icon"><use href="#i-shield"/></svg> TTB Label Verification</span>
+      <nav>
+        <a href="/" class="active">Single label</a>
+        <a href="/batch">Batch</a>
+      </nav>
+    </div>
+  </header>
+
   <main class="page">
     <header class="head">
-      <h1>TTB label verification</h1>
+      <h1>Verify a single label</h1>
       <p class="tagline">Upload a label, enter what it should say, and check them against each other.</p>
       <p><a class="back-link" href="/batch">Checking many labels at once? Use batch mode &rarr;</a></p>
     </header>
@@ -18,7 +37,7 @@
       <div class="grid">
         <section class="upload-zone" id="upload-zone">
           <label for="label-file" class="upload-label">
-            <span class="upload-title">Drop a label image here, or click to choose</span>
+            <span class="upload-title"><svg class="icon"><use href="#i-image"/></svg>Drop a label image here, or click to choose</span>
             <span class="file-name" id="file-name"></span>
           </label>
           <input type="file" id="label-file" name="label_image" accept="image/*" class="file-input" required />
@@ -44,16 +63,19 @@
         The Government Warning has no box — the app checks the label against the official regulation text automatically.
       </p>
 
-      <button type="submit" id="verify-button" class="primary-button">Verify label</button>
+      <button type="submit" id="verify-button" class="btn btn--primary btn--block">Verify label</button>
     </form>
 
     {% if error %}
-    <div class="error-banner" role="alert">{{ error }}</div>
+    <div class="error-banner" role="alert"><svg class="icon"><use href="#i-warn"/></svg>{{ error }}</div>
     {% endif %}
 
     {% if rows %}
     <section class="results" aria-label="Results">
-      <div class="overall overall-{{ overall_state }}">{{ overall_message }}</div>
+      <div class="overall overall-{{ overall_state }}">
+        <svg class="icon"><use href="#i-{{ 'check' if overall_state == 'PASS' else ('x' if overall_state == 'FAIL' else 'warn') }}"/></svg>
+        {{ overall_message }}
+      </div>
       <table id="results-table">
         <thead>
           <tr>
@@ -70,7 +92,10 @@
             <td class="cell-val">{{ row.extracted }}</td>
             <td class="cell-val">{{ row.expected }}</td>
             <td class="cell-result">
-              <span class="badge badge-{{ row.verdict }}">{{ row.verdict_label }}</span>
+              <span class="badge badge-{{ row.verdict }}">
+                <svg class="icon"><use href="#i-{{ 'check' if row.verdict == 'PASS' else ('x' if row.verdict == 'FAIL' else 'warn') }}"/></svg>
+                {{ row.verdict_label }}
+              </span>
               {% if row.reason %}<div class="reason">{{ row.reason }}</div>{% endif %}
             </td>
           </tr>

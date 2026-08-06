@@ -69,3 +69,47 @@ def test_post_batch_upload_no_csv_errors():
     r = client.post("/batch", data={"mode": "upload"})
     assert r.status_code == 400
     assert "CSV" in r.json()["error"]
+
+
+def test_run_batch_stream_dedups_identical_images(monkeypatch):
+    """Two batch items with the SAME image bytes extract exactly ONCE (shared cache).
+
+    Fully offline: a fake batch extractor counts calls (no real model). Serialized
+    with max_concurrency=1 so the second item is a deterministic cache hit.
+    """
+    import asyncio
+
+    from app.batch import BatchItem, run_batch_stream
+    from app.extraction import router
+    from app.extraction.base import ExtractionResult
+
+    counter = {"n": 0}
+
+    class _Fake:
+        def extract(self, image_bytes):
+            counter["n"] += 1
+            return ExtractionResult(
+                fields={k: "" for k in
+                        ["brand", "alcohol_content", "warning", "class_type",
+                         "net_contents", "producer", "country_of_origin"]},
+                ok=True,
+            )
+
+    monkeypatch.setattr(router, "get_batch_extractor", lambda: _Fake())
+
+    with open("test_labels/label_01_compliant.png", "rb") as fh:
+        img = fh.read()
+    items = [
+        BatchItem(name="A", image_filename="a.png", expected={"brand": "X"}, image_bytes=img),
+        BatchItem(name="B", image_filename="b.png", expected={"brand": "Y"}, image_bytes=img),
+    ]
+
+    async def run():
+        out = []
+        async for pair in run_batch_stream(items, 1):  # serialized -> deterministic hit
+            out.append(pair)
+        return out
+
+    results = asyncio.run(run())
+    assert len(results) == 2
+    assert counter["n"] == 1  # identical image transcribed once; second is a cache hit

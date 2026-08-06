@@ -4,9 +4,26 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TTB Batch Verification</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
+  <svg class="svg-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 2.3V11c0 4.6-3 7.9-7 9.2-4-1.3-7-4.6-7-9.2V5.3L12 3z"/><path d="M8.7 12l2.3 2.3L15.4 9.6"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 16l5-4 4 3 3-2 6 5"/><circle cx="8.5" cy="9" r="1.4"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M4 15v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></symbol>
+  </svg>
+
+  <header class="site-header">
+    <div class="wrap">
+      <span class="brand"><svg class="icon"><use href="#i-shield"/></svg> TTB Label Verification</span>
+      <nav>
+        <a href="/">Single label</a>
+        <a href="/batch" class="active">Batch</a>
+      </nav>
+    </div>
+  </header>
+
   <main class="page">
     <header class="head">
       <h1>Check a batch of labels</h1>
@@ -16,13 +33,13 @@
 
     <section class="batch-entry">
       <div class="entry-card">
-        <h2>Try the demo</h2>
+        <h2><svg class="icon"><use href="#i-image"/></svg>Try the demo</h2>
         <p>Run the {{ demo_count or 300 }} built-in sample labels — no files needed.</p>
-        <button type="button" id="demo-button" class="primary-button">Run the demo batch</button>
+        <button type="button" id="demo-button" class="btn btn--primary btn--block">Run the demo batch</button>
       </div>
 
       <div class="entry-card">
-        <h2>Use your own</h2>
+        <h2><svg class="icon"><use href="#i-upload"/></svg>Use your own</h2>
         <p>Upload a CSV of expected values and the label images (matched by file name).</p>
         <p><a href="/template.csv" download>Download the CSV template</a></p>
         <form id="upload-form">
@@ -30,7 +47,7 @@
           <input type="file" id="csv-file" name="csv_file" accept=".csv" />
           <label class="upload-sub" for="images-file">Label images (select all)</label>
           <input type="file" id="images-file" name="images" accept="image/*" multiple />
-          <button type="submit" class="primary-button secondary">Check my batch</button>
+          <button type="submit" class="btn btn--secondary btn--block">Check my batch</button>
         </form>
       </div>
     </section>

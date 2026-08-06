@@ -1,12 +1,14 @@
 """Batch runner — pairing + concurrent, progressively-streamed verification.
 
-Reuses the finished single-label engine (app.verify.verify_label) unchanged:
-batch is pairing + a capped concurrency pool + SSE streaming, NOT new
-verification logic (FR-10/11, NFR-02). Each item is paired to its image by
-filename, run concurrently under MAX_CONCURRENCY, and yielded the moment it
-finishes so the UI can stream rows. No image-hash dedup in the prototype (a
-documented cost optimization); the per-item quality gate already pre-screens
-blank/unreadable uploads inside verify_label.
+Reuses the finished verification core (app.verify.verify_label_with) — same
+quality gate, warning cross-check, and matcher as single-label — but routes
+extraction through the CHEAP batch engine (BATCH_MODEL / Luna) with an in-memory
+image-hash dedup cache, so a public demo is affordable. Batch is pairing + a
+capped concurrency pool + SSE streaming (FR-10/11, NFR-02); each item is paired
+to its image by filename, run concurrently under MAX_CONCURRENCY, and yielded the
+moment it finishes so the UI can stream rows. The dedup cache stores the
+EXTRACTION (not the verdict), so identical images are transcribed once while the
+matcher still runs per item against that item's expected values.
 """
 
 from __future__ import annotations
@@ -17,10 +19,12 @@ import io
 import os
 from dataclasses import dataclass
 
+from app.cache import ImageCache
 from app.config import get_settings
 from app.data_source import get_application_source
+from app.extraction.router import extract_batch
 from app.fields import FIELD_REGISTRY
-from app.verify import verify_label
+from app.verify import verify_label_with
 
 # Registry keys the agent supplies (the warning is checked against the canonical
 # text, not the application — MA-8 — so it is never a supplied expected value).
@@ -102,12 +106,23 @@ def build_uploaded_items(csv_bytes: bytes, images: "dict[str, bytes]"):
 
 
 async def run_batch_stream(items: "list[BatchItem]", max_concurrency: int):
-    """Verify items concurrently (capped), yielding (item, LabelResult) as each finishes."""
+    """Verify items concurrently (capped), yielding (item, LabelResult) as each finishes.
+
+    Uses the CHEAP batch engine + ONE shared dedup cache for the whole run, so an
+    identical image is transcribed once (and reused on repeat runs in the same
+    process). The matcher still runs per item against its expected values.
+    """
     sem = asyncio.Semaphore(max(1, int(max_concurrency)))
+    cache = ImageCache()  # one shared cache for this batch run
+
+    def batch_extract(image_bytes: bytes):
+        return extract_batch(image_bytes, cache)
 
     async def process(item: BatchItem):
         async with sem:
-            result = await asyncio.to_thread(verify_label, item.image_bytes, item.expected)
+            result = await asyncio.to_thread(
+                verify_label_with, item.image_bytes, item.expected, batch_extract
+            )
             return item, result
 
     tasks = [asyncio.create_task(process(it)) for it in items]

@@ -89,10 +89,25 @@ def _parse_json(raw: str) -> dict:
 
 
 class OpenAIVisionExtractor(Extractor):
-    """OpenAI vision-LLM transcription. Config-selected via PRIMARY_MODEL/API_KEY."""
+    """OpenAI vision-LLM transcription. Config-selected via API_KEY + a model id.
 
-    def __init__(self, settings: "Settings | None" = None) -> None:
+    ``model`` defaults to ``PRIMARY_MODEL`` (the single-label path, unchanged);
+    the batch factory passes ``BATCH_MODEL`` (the cheap tier). Everything else —
+    prompt, JSON parsing, downscale, timeout, fail-safe — is identical.
+    """
+
+    def __init__(
+        self,
+        settings: "Settings | None" = None,
+        model: "str | None" = None,
+        timeout_s: "float | None" = None,
+    ) -> None:
         self.settings = settings or get_settings()
+        self.model = model or self.settings.PRIMARY_MODEL
+        # Single-label keeps its fail-fast budget; batch passes a longer timeout.
+        self.timeout_s = (
+            timeout_s if timeout_s is not None else self.settings.SINGLE_LABEL_TIMEOUT_S
+        )
 
     def extract(self, image_bytes: bytes) -> ExtractionResult:
         """Transcribe the label via the primary vision model, fail-fast.
@@ -106,15 +121,15 @@ class OpenAIVisionExtractor(Extractor):
 
             client = OpenAI(
                 api_key=self.settings.API_KEY,
-                timeout=self.settings.SINGLE_LABEL_TIMEOUT_S,
-                max_retries=0,  # no silent retry-balloon past the latency budget
+                timeout=self.timeout_s,
+                max_retries=0,  # no silent retry-balloon; batch retry is handled in the router
             )
             proc_bytes, mime = _prepare_image(image_bytes, self.settings.VISION_MAX_IMAGE_DIM)
             b64 = base64.b64encode(proc_bytes).decode("ascii")
             data_url = f"data:{mime};base64,{b64}"
 
             response = client.responses.create(
-                model=self.settings.PRIMARY_MODEL,
+                model=self.model,
                 reasoning={"effort": "low"},  # transcription needs no deep reasoning
                 max_output_tokens=self.settings.MAX_OUTPUT_TOKENS,
                 input=[

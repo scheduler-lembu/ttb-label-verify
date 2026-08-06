@@ -74,18 +74,14 @@ def _downgrade_warning_on_disagreement(label_result: LabelResult) -> LabelResult
     return LabelResult.from_fields(new_fields) if changed else label_result
 
 
-def verify_label(image_bytes: bytes, expected: dict) -> LabelResult:
-    """Verify one label image against its expected application-data values.
+def verify_label_with(image_bytes: bytes, expected: dict, extract_fn) -> LabelResult:
+    """Core pipeline: quality gate → ``extract_fn`` → matcher → warning cross-check.
 
-    Args:
-        image_bytes: the uploaded label image.
-        expected: field-key → expected value (from the on-screen form).
-
-    Returns:
-        A ``LabelResult`` with a ``FieldResult`` per registry field. If the
-        image fails the quality gate or the extractor is unavailable, every
-        field is NEEDS_REVIEW and overall rolls up to NEEDS_REVIEW — the app
-        degrades gracefully rather than crashing.
+    ``extract_fn(image_bytes) -> ExtractionResult`` is the ONLY thing that varies
+    between single-label (primary model) and batch (cheap model + dedup cache).
+    The quality gate, the literal-OCR warning cross-check, the (unchanged)
+    matcher, and the failure branch (all fields NEEDS_REVIEW) are identical for
+    both paths.
     """
     # STAGE 1: image quality gate — reject unreadable uploads BEFORE any API call.
     settings = get_settings()
@@ -104,7 +100,7 @@ def verify_label(image_bytes: bytes, expected: dict) -> LabelResult:
     # STAGE 2: parallel read — vision extract + (optional) literal OCR of the warning.
     xcheck_active = settings.WARNING_XCHECK_ENABLED and is_tesseract_available()
     with ThreadPoolExecutor(max_workers=2) as ex:
-        vlm_future = ex.submit(extract_single, image_bytes)
+        vlm_future = ex.submit(extract_fn, image_bytes)
         ocr_future = ex.submit(read_warning, image_bytes) if xcheck_active else None
         result = vlm_future.result()
         ocr = ocr_future.result() if ocr_future is not None else None
@@ -122,3 +118,19 @@ def verify_label(image_bytes: bytes, expected: dict) -> LabelResult:
             label_result = _downgrade_warning_on_disagreement(label_result)
 
     return label_result
+
+
+def verify_label(image_bytes: bytes, expected: dict) -> LabelResult:
+    """Verify one label image against its expected application-data values.
+
+    The single-label (~5s interactive) path: uses the primary extractor
+    (``extract_single``). Signature and behavior are unchanged — this is a thin
+    wrapper over :func:`verify_label_with`.
+
+    Returns:
+        A ``LabelResult`` with a ``FieldResult`` per registry field. If the
+        image fails the quality gate or the extractor is unavailable, every
+        field is NEEDS_REVIEW and overall rolls up to NEEDS_REVIEW — the app
+        degrades gracefully rather than crashing.
+    """
+    return verify_label_with(image_bytes, expected, extract_single)
