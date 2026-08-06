@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import base64
 import json
+from io import BytesIO
 
 from app.config import Settings, get_settings
 from app.extraction.base import ExtractionResult, Extractor
@@ -33,6 +34,28 @@ def _image_mime(image_bytes: bytes) -> str:
     if image_bytes[:6] in (b"GIF87a", b"GIF89a"):
         return "image/gif"
     return "image/png"
+
+
+def _prepare_image(image_bytes: bytes, max_dim: int) -> "tuple[bytes, str]":
+    """Downscale to a longest side of max_dim if larger; return (bytes, mime).
+    Small images pass through unchanged. Fail-safe: on any error, send the
+    original bytes so extraction still proceeds."""
+    try:
+        from PIL import Image
+        with Image.open(BytesIO(image_bytes)) as img:
+            w, h = img.size
+            if max(w, h) <= max_dim:
+                return image_bytes, _image_mime(image_bytes)
+            scale = max_dim / float(max(w, h))
+            resized = img.convert("RGB").resize(
+                (max(1, int(w * scale)), max(1, int(h * scale))),
+                Image.LANCZOS,
+            )
+            buf = BytesIO()
+            resized.save(buf, format="JPEG", quality=90)
+            return buf.getvalue(), "image/jpeg"
+    except Exception:
+        return image_bytes, _image_mime(image_bytes)
 
 
 def _coerce_fields(parsed: dict) -> "dict[str, str | None]":
@@ -84,13 +107,16 @@ class OpenAIVisionExtractor(Extractor):
             client = OpenAI(
                 api_key=self.settings.API_KEY,
                 timeout=self.settings.SINGLE_LABEL_TIMEOUT_S,
+                max_retries=0,  # no silent retry-balloon past the latency budget
             )
-            b64 = base64.b64encode(image_bytes).decode("ascii")
-            data_url = f"data:{_image_mime(image_bytes)};base64,{b64}"
+            proc_bytes, mime = _prepare_image(image_bytes, self.settings.VISION_MAX_IMAGE_DIM)
+            b64 = base64.b64encode(proc_bytes).decode("ascii")
+            data_url = f"data:{mime};base64,{b64}"
 
             response = client.responses.create(
                 model=self.settings.PRIMARY_MODEL,
                 reasoning={"effort": "low"},  # transcription needs no deep reasoning
+                max_output_tokens=self.settings.MAX_OUTPUT_TOKENS,
                 input=[
                     {
                         "role": "user",

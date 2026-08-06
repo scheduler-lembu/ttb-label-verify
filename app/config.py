@@ -33,7 +33,13 @@ class Settings:
     MAX_BATCH_ITEMS: int = 300
     PER_BATCH_COST_CEILING: float = 0.0
     MAX_UPLOAD_MB: int = 10
-    SINGLE_LABEL_TIMEOUT_S: float = 5.0
+    # per-request hard timeout (hang ceiling); typical latency is ~2-3s, the ~5s
+    # target is met by normal model latency — this only catches genuine stalls.
+    SINGLE_LABEL_TIMEOUT_S: float = 10.0
+
+    # Vision-call hardening (latency + cost).
+    VISION_MAX_IMAGE_DIM: int = 1536
+    MAX_OUTPUT_TOKENS: int = 700
 
     # Access (optional, OFF by default).
     DEMO_PASSWORD: str = ""
@@ -97,7 +103,9 @@ def get_settings() -> Settings:
         MAX_BATCH_ITEMS=_get_int("MAX_BATCH_ITEMS", 300),
         PER_BATCH_COST_CEILING=_get_float("PER_BATCH_COST_CEILING", 0.0),
         MAX_UPLOAD_MB=_get_int("MAX_UPLOAD_MB", 10),
-        SINGLE_LABEL_TIMEOUT_S=_get_float("SINGLE_LABEL_TIMEOUT_S", 5.0),
+        SINGLE_LABEL_TIMEOUT_S=_get_float("SINGLE_LABEL_TIMEOUT_S", 10.0),
+        VISION_MAX_IMAGE_DIM=_get_int("VISION_MAX_IMAGE_DIM", 1536),
+        MAX_OUTPUT_TOKENS=_get_int("MAX_OUTPUT_TOKENS", 700),
         DEMO_PASSWORD=_get("DEMO_PASSWORD", ""),
         QUALITY_GATE_ENABLED=_get_bool("QUALITY_GATE_ENABLED", True),
         QUALITY_BLUR_THRESHOLD=_get_float("QUALITY_BLUR_THRESHOLD", 60.0),

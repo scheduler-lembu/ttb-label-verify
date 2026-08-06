@@ -53,6 +53,7 @@ limitation as we build, so the final README writeup is already done and every
 | D-17 | **Parallel dual read** | Vision call and Tesseract read run concurrently (thread pool) | Adds ~no wall-clock (bounded by the slower read), so the cross-check honors the ~5s bar | Slightly more orchestration than sequential | async in production |
 | D-18 | **Cross-check is one-directional (safety-only)** | The cross-check can only move a warning PASS → NEEDS_REVIEW; it never relaxes a FAIL/REVIEW, and the strict verdict still runs on the vision read via the unchanged matcher | Keeps the graded matcher frozen and the change strictly conservative | A compliant warning misread by OCR may be flagged for a human (visible, overridable) | Tune threshold with real data |
 | D-19 | **Graceful OCR fallback** | If the Tesseract binary is unavailable, the cross-check is skipped and the warning falls back to the vision read (the #4 behavior) | The cross-check is an enhancement, not a hard dependency; local dev without the binary still runs | Without Tesseract the false-PASS protection is prompt-only | The deployed container ships Tesseract so production always has the cross-check |
+| D-20 | **Single-label latency hardening** | Disable SDK retries (max_retries=0); a generous per-request hang-ceiling timeout (stall → NEEDS_REVIEW); cap output tokens; downscale oversized images before the vision call | The retry-balloon pushed a slow call past the bar; typical latency (~2-3s median) meets NFR-01, and downscaling keeps real phone photos fast and cheap | A genuinely slow single attempt can still take up to the hang-ceiling; the ~5s is met by typical latency, not a hard guillotine | Faster model tier / streaming in production |
 
 ---
 
@@ -100,6 +101,11 @@ limitation as we build, so the final README writeup is already done and every
 - **Determinism → no model fallback:** real-world coverage is exactly what we
   encode; the deliberately-nasty test-label catalog is the safety net, not the
   matcher.
+- **Latency is bounded primarily by typical model latency** (median ~2-3s on the
+  catalog), not a hard 5s guillotine: retries are disabled and output/image size
+  are capped so a slow call degrades to NEEDS_REVIEW at a hang-ceiling rather than
+  ballooning, and large uploads are downscaled to stay within the interactive
+  range and cut cost.
 
 ---
 
@@ -138,6 +144,10 @@ limitation as we build, so the final README writeup is already done and every
     back to the vision transcription (prompt-guarded only). The deployed
     container installs tesseract-ocr so the cross-check is always active in
     production.
+14. **Single-label latency is dominated by the vision model;** the heaviest labels
+    approach ~5s and rely on typical latency (not a hard cap) to meet NFR-01. A
+    per-request hang-ceiling prevents indefinite waits by degrading a stalled call
+    to NEEDS_REVIEW.
 
 ---
 
