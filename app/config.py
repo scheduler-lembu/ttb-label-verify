@@ -41,6 +41,10 @@ class Settings:
     VISION_MAX_IMAGE_DIM: int = 1536
     MAX_OUTPUT_TOKENS: int = 700
 
+    # Application data source (expected values a label is checked against).
+    DATA_SOURCE: str = "demo"  # "demo" or "azure"
+    DEMO_DB_PATH: str = "sample_data/demo_applications.csv"
+
     # Access (optional, OFF by default).
     DEMO_PASSWORD: str = ""
 
@@ -106,6 +110,8 @@ def get_settings() -> Settings:
         SINGLE_LABEL_TIMEOUT_S=_get_float("SINGLE_LABEL_TIMEOUT_S", 10.0),
         VISION_MAX_IMAGE_DIM=_get_int("VISION_MAX_IMAGE_DIM", 1536),
         MAX_OUTPUT_TOKENS=_get_int("MAX_OUTPUT_TOKENS", 700),
+        DATA_SOURCE=_get("DATA_SOURCE", "demo"),
+        DEMO_DB_PATH=_get("DEMO_DB_PATH", "sample_data/demo_applications.csv"),
         DEMO_PASSWORD=_get("DEMO_PASSWORD", ""),
         QUALITY_GATE_ENABLED=_get_bool("QUALITY_GATE_ENABLED", True),
         QUALITY_BLUR_THRESHOLD=_get_float("QUALITY_BLUR_THRESHOLD", 60.0),
