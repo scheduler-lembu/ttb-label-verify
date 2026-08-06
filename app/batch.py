@@ -105,6 +105,19 @@ def build_uploaded_items(csv_bytes: bytes, images: "dict[str, bytes]"):
     return items, errors
 
 
+def image_bytes_for(items: "list[BatchItem]", image_filename: str) -> "bytes | None":
+    """Return the stored bytes of the item whose image_filename matches EXACTLY.
+
+    Safe lookup for the image endpoint: it compares the requested name against the
+    job's stored filenames — it never builds a filesystem path from the URL value,
+    so path-traversal strings simply match nothing and return None.
+    """
+    for item in items:
+        if item.image_filename == image_filename:
+            return item.image_bytes
+    return None
+
+
 async def run_batch_stream(items: "list[BatchItem]", max_concurrency: int):
     """Verify items concurrently (capped), yielding (item, LabelResult) as each finishes.
 

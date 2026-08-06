@@ -1,12 +1,16 @@
 # Batch Triage & Data-Source — Design Direction (Documented Target)
 ## TTB AI Label Verification Prototype — Working Document
 
-> **STATUS: IN BUILD — Phase 3 (exception-folder triage) functionally complete, pending deploy.**
-> Batch sorts into folders by reason code and clean items auto-clear; clicking a label opens the full
-> per-field detail. The approve / reject / "tool was wrong" click-through is now BUILT, with the row
-> clearing on-screen the instant the agent acts (label-level disposition — one label with one decision
-> clears from every folder it appears in), running tallies, and an "all caught up" closing state.
-> Disposition is session-only, held in memory with no persistence (D-8 / CON-02). Next: deploy.
+> **STATUS: IN BUILD — Phase 3 (exception-field triage) functionally complete, pending deploy.**
+> Buckets are now ONE PER FIELD: clean items auto-clear, and each field that needs a human is a bucket
+> whose closed card shows only its name + a live count. Clicking a bucket opens a focused, one-label-at-a-
+> time REVIEW SCREEN — a banner of what to check, the submitted photo (served to the browser), what the
+> application says for that field, a plain-language reason it was flagged, and **Approve / Reject** —
+> advancing until the bucket empties. **Approve is per-field** (clears the label from that bucket only);
+> **Reject is whole-application** (pulls the label from every bucket and records a "Rejected for / Please
+> check" rollup of all its flagged fields). A whole-label extractor failure collapses to a single
+> "Couldn't read the label" bucket. Disposition is session-only, in memory, no persistence (D-8 / CON-02).
+> Next: deploy.
 
 ---
 
@@ -25,18 +29,25 @@ The target workflow:
 2. **Clean items auto-clear.** Every pair runs through the existing pipeline
    ("AI reads, code judges"). Anything that comes back all-PASS drops out of the human's
    view — it is done. The agent never looks at the labels that were already right.
-3. **Exceptions group into folders by reason code.** Everything not-clean is bucketed by
-   *why* it was flagged, using the reason taxonomy already in the result model (D-14):
-   an "ABV mismatch" folder, a "warning wording" folder, a "couldn't read" folder, a
-   "blank in the application" folder, and so on.
-4. **Review one flaw across many labels.** The agent works a folder at a time — reviewing
-   the same kind of problem across many labels in one mental mode, instead of context-
-   switching field-by-field down a queue. This is the efficiency multiplier for a team of
-   47 covering 150,000 applications a year.
-5. **Click-through resolution.** For each flagged item the agent can **approve** (override
-   to accept), **reject**, or **note**, right in the folder.
-6. **Multi-flaw labels appear in multiple folders.** A label with both an ABV mismatch and
-   a bad warning is tagged into both folders; resolving it in one reflects everywhere.
+3. **Exceptions group into buckets — one per FIELD.** Everything not-clean is bucketed by
+   *which field* needs a human: a "Brand name" bucket, an "Alcohol content" bucket, a
+   "Government warning" bucket, and so on. A closed bucket shows only its name + a live
+   count (no preview of contents). A whole-label extractor failure collapses into a single
+   "Couldn't read the label" bucket instead of tagging all seven fields.
+4. **Review one field across many labels.** Clicking a bucket opens a focused review screen,
+   one label at a time: a banner of what to check, the submitted photo (served to the
+   browser from the job store), what the application says for that field, a plain-language
+   reason it was flagged, and Approve / Reject — advancing to the next label until the
+   bucket empties. This lets the agent stay in one mental mode instead of context-switching
+   field-by-field down a queue — the efficiency multiplier for a team of 47.
+5. **Approve is per-field; Reject is whole-application.** *Approve* accepts that one field
+   and clears the label from that bucket only (an override, FR-12); when every flagged field
+   of a label is approved, the label is fully cleared. *Reject* fails the whole application:
+   it pulls the label from every bucket and records a "Rejected for {field} / Please check
+   {all flagged fields}" rollup so the follow-up is unambiguous.
+6. **Multi-flag labels appear in multiple buckets.** A label flagged on both brand and ABV
+   sits in both buckets; approving it in one leaves it in the other, while rejecting it in
+   one removes it from all.
 
 ## 2. The single-label view is retained, not retired
 

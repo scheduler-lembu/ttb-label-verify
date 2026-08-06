@@ -1,15 +1,17 @@
-"""Exception-folder triage — grouping non-PASS results by problem type.
+"""Exception buckets — grouping non-PASS results ONE PER FIELD.
 
 Single responsibility: turn the per-field verdicts the engine already produced
-into "folders" by reason code, so a finished batch surfaces as
-"clean items auto-cleared / exceptions grouped by the one problem". This is pure,
-deterministic Python ("code judges" stays in code) and is unit-tested offline.
+into review "buckets", one per label field, so a finished batch surfaces as
+"clean items auto-cleared / the rest grouped by which field needs a human". This
+is pure, deterministic Python ("code judges" stays in code), unit-tested offline.
 
-It NEVER reclassifies or changes a verdict — folders only GROUP the non-PASS
-results the matcher emitted. A clean label (all fields PASS) produces no tags; a
-multi-flaw label produces one tag per distinct folder (so it appears in several).
+It NEVER reclassifies or changes a verdict — buckets only GROUP the non-PASS
+results the matcher emitted. A clean label (all PASS) produces no tags; a
+multi-flag label produces one tag per flagged field (so it appears in several
+buckets). A whole-label extractor failure (every field NEEDS_REVIEW / UNREADABLE)
+collapses to a SINGLE "couldn't read the label" bucket rather than all seven.
 
-``FolderTag`` is defined HERE (not in app.models) so the graded models are not
+``BucketTag`` is defined HERE (not in app.models) so the graded models are not
 touched. See BATCH_TRIAGE_DESIGN.md.
 """
 
@@ -17,63 +19,36 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from app.fields import FIELD_REGISTRY, RuleType
+from app.fields import FIELD_REGISTRY
 from app.models import LabelResult, ResultReason, ResultState
 
-# Supporting field keys (registry-driven, not hardcoded).
-_SUPPORTING = {f.key for f in FIELD_REGISTRY if f.rule == RuleType.SUPPORTING}
+# Human bucket labels, per field key. Falls back to the registry label.
+_REGISTRY_LABELS = {f.key: f.label for f in FIELD_REGISTRY}
+_BUCKET_LABELS = {
+    "brand": "Brand name",
+    "alcohol_content": "Alcohol content",
+    "warning": "Government warning",
+    "class_type": "Class / type",
+    "net_contents": "Net contents",
+    "producer": "Producer name & address",
+    "country_of_origin": "Country of origin",
+}
 
-# Fallback folder — guarantees no non-PASS result is ever silently dropped.
-_FALLBACK = ("other_review", "Other — needs review")
-
-R = ResultReason
-
-
-def folder_for(field: str, reason: ResultReason) -> "tuple[str, str]":
-    """Map a non-PASS (field, reason) to a stable (folder_id, human label).
-
-    Anything not explicitly mapped lands in the "Other — needs review" fallback.
-    """
-    if field == "warning":
-        return {
-            R.WARNING_WORDING: ("warning_wording", "Warning — wording changed"),
-            R.WARNING_PREFIX_NOT_ALLCAPS: ("warning_prefix_case", "Warning — prefix not all caps"),
-            R.WARNING_PREFIX_MISSING: ("warning_prefix_missing", "Warning — prefix missing"),
-            R.UNREADABLE: ("warning_unreadable", "Warning — couldn't read"),
-        }.get(reason, _FALLBACK)
-
-    if field == "alcohol_content":
-        if reason == R.MISMATCH:
-            return ("abv_mismatch", "Alcohol content — mismatch")
-        if reason == R.BLANK_EXPECTED:
-            return ("abv_blank", "Alcohol content — confirm absence")
-        if reason in (R.UNREADABLE, R.UNEXPECTED_VALUE):
-            return ("abv_unreadable", "Alcohol content — couldn't read")
-        return _FALLBACK
-
-    if field == "brand":
-        return {
-            R.MISMATCH: ("brand_mismatch", "Brand — mismatch"),
-            R.BORDERLINE: ("brand_borderline", "Brand — borderline match"),
-            R.SPECIAL_CHARACTER: ("brand_special", "Brand — special characters"),
-            R.UNREADABLE: ("brand_unreadable", "Brand — couldn't read"),
-        }.get(reason, _FALLBACK)
-
-    if field in _SUPPORTING:
-        if reason == R.BLANK_EXPECTED:
-            return ("required_blank", "Required field left blank")
-        if reason in (R.MISMATCH, R.BORDERLINE, R.UNREADABLE, R.SPECIAL_CHARACTER):
-            return ("supporting_review", "Supporting field — needs review")
-        return _FALLBACK
-
-    return _FALLBACK
+# The whole-label "couldn't read" bucket (extractor-unavailable labels).
+UNREADABLE_BUCKET_ID = "unreadable_label"
+UNREADABLE_BUCKET_LABEL = "Couldn't read the label"
 
 
-class FolderTag(BaseModel):
-    """One flaw of one label, tagged into the folder that groups its problem."""
+def bucket_label_for(field: str) -> str:
+    """Human-readable bucket name for a field key."""
+    return _BUCKET_LABELS.get(field) or _REGISTRY_LABELS.get(field, field)
 
-    folder_id: str
-    folder_label: str
+
+class BucketTag(BaseModel):
+    """One flagged field of one label, tagged into that field's bucket."""
+
+    bucket_id: str
+    bucket_label: str
     field: str
     reason: str
     extracted: str | None = None
@@ -86,26 +61,48 @@ def is_clean(result: LabelResult) -> bool:
     return all(fr.verdict == ResultState.PASS for fr in result.fields)
 
 
-def folder_tags_for(result: LabelResult) -> "list[FolderTag]":
-    """Return one FolderTag per distinct problem folder for a label.
+def _is_whole_label_unreadable(result: LabelResult) -> bool:
+    """True iff this is an extractor-unavailable label.
 
-    Clean labels return ``[]``. Multi-flaw labels return several tags (into
-    several folders). Identical folder_ids are de-duped so a label appears once
-    per folder.
+    verify marks that case by setting EVERY field to NEEDS_REVIEW / UNREADABLE.
     """
-    tags: list[FolderTag] = []
-    seen: set[str] = set()
+    return bool(result.fields) and all(
+        fr.verdict == ResultState.NEEDS_REVIEW and fr.reason == ResultReason.UNREADABLE
+        for fr in result.fields
+    )
+
+
+def bucket_tags_for(result: LabelResult) -> "list[BucketTag]":
+    """Return the review buckets a label belongs in.
+
+    Clean labels return ``[]``. A whole-label extractor failure returns a single
+    ``unreadable_label`` tag. Otherwise one tag per flagged (non-PASS) field.
+    """
+    if is_clean(result):
+        return []
+
+    if _is_whole_label_unreadable(result):
+        first = result.fields[0]
+        return [
+            BucketTag(
+                bucket_id=UNREADABLE_BUCKET_ID,
+                bucket_label=UNREADABLE_BUCKET_LABEL,
+                field=UNREADABLE_BUCKET_ID,
+                reason=first.reason.value,
+                extracted=None,
+                expected=None,
+                note=first.note,
+            )
+        ]
+
+    tags: list[BucketTag] = []
     for fr in result.fields:
         if fr.verdict == ResultState.PASS:
             continue
-        folder_id, folder_label = folder_for(fr.field, fr.reason)
-        if folder_id in seen:
-            continue
-        seen.add(folder_id)
         tags.append(
-            FolderTag(
-                folder_id=folder_id,
-                folder_label=folder_label,
+            BucketTag(
+                bucket_id=fr.field,
+                bucket_label=bucket_label_for(fr.field),
                 field=fr.field,
                 reason=fr.reason.value,
                 extracted=fr.extracted,

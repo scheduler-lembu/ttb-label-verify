@@ -221,83 +221,58 @@ body {
 .entry-card input[type="file"] { width: 100%; font-size: 0.95rem; }
 
 /* =========================================================================
-   Triage results (structure rebuilt in #12; here it inherits the tokens)
+   Triage — summary, per-field bucket cards, focused review screen (#11 system)
    ========================================================================= */
 .triage-summary {
-  padding: 1rem 1.15rem; margin-bottom: 1.25rem;
+  padding: 1rem 1.15rem; margin-bottom: 1rem;
   font-size: 1.2rem; font-weight: 700;
   background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
 }
-.triage-reviewed { margin: -0.5rem 0 1rem; font-size: 1rem; font-weight: 700; color: var(--muted); }
-.undo-last {
-  margin: -0.25rem 0 1rem; padding: 0.45rem 0.9rem; font-size: 0.95rem; font-family: inherit;
-  font-weight: 700; cursor: pointer; color: var(--fg);
-  background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm);
+.triage-reviewed { margin: 0 0 1rem; font-size: 1rem; font-weight: 700; color: var(--muted); }
+.triage-flash {
+  margin: 0 0 1rem; padding: 0.8rem 1.05rem; font-weight: 700;
+  color: var(--fail-fg); background: var(--fail-bg); border: 1px solid #f2b8b5; border-radius: var(--radius-sm);
 }
-.undo-last:hover { background: var(--panel); }
 .triage-done {
-  padding: 1.5rem 1.25rem; font-size: 1.3rem; font-weight: 700;
-  color: var(--pass-fg); background: var(--pass-bg); border-radius: var(--radius);
+  padding: 1.5rem 1.25rem; font-size: 1.25rem; font-weight: 700; line-height: 1.5;
+  color: var(--pass-fg); background: var(--pass-bg); border: 1px solid #bfe3cb; border-radius: var(--radius);
 }
 
-.folders { display: flex; flex-direction: column; gap: 0.75rem; }
-.folder-card { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--card); box-shadow: var(--shadow); }
-.folder-card.open { border-color: var(--accent); }
-.folder-head {
-  width: 100%; display: flex; align-items: center; justify-content: space-between;
-  gap: 1rem; padding: 1.1rem 1.25rem; cursor: pointer;
-  font-size: 1.15rem; font-weight: 700; font-family: inherit; text-align: left;
-  color: var(--fg); background: var(--panel); border: none;
+/* --- Bucket cards (one per field that needs a human) --- */
+.buckets { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.9rem; }
+.bucket-card {
+  display: flex; align-items: center; gap: 0.75rem; text-align: left; font-family: inherit; cursor: pointer;
+  padding: 1.15rem 1.25rem; background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow); color: var(--fg);
 }
-.folder-head:hover { background: #e9edf3; }
-.folder-name::before { content: "▸ "; color: var(--muted); }
-.folder-card.open .folder-name::before { content: "▾ "; }
-.folder-count {
-  flex: none; min-width: 2.2rem; text-align: center;
-  padding: 0.1rem 0.6rem; border-radius: var(--radius-pill);
-  font-size: 0.95rem; color: var(--review-fg); background: var(--review-bg);
+.bucket-card:hover { border-color: var(--accent); background: #f6f9ff; }
+.bucket-card:focus-visible { outline: none; box-shadow: var(--focus); }
+.bucket-card .icon { flex: none; width: 1.6rem; height: 1.6rem; color: var(--primary); }
+.bucket-name { flex: 1 1 auto; font-size: 1.1rem; font-weight: 700; }
+.bucket-count {
+  flex: none; min-width: 2.1rem; text-align: center; padding: 0.15rem 0.65rem;
+  font-size: 1rem; font-weight: 800; color: var(--review-fg); background: var(--review-bg); border-radius: var(--radius-pill);
 }
-.folder-card.cleared .folder-count { color: var(--pass-fg); background: var(--pass-bg); }
-.folder-list { display: flex; flex-direction: column; }
-.folder-row {
-  display: flex; flex-direction: row; align-items: center; justify-content: space-between;
-  gap: 1rem; width: 100%; padding: 0.85rem 1.25rem; border-top: 1px solid var(--border); background: var(--card);
-}
-@media (max-width: 560px) { .folder-row { flex-direction: column; align-items: stretch; } }
-.folder-row:hover { background: #f6f9ff; }
-.folder-row-open {
-  display: flex; flex-direction: column; gap: 0.15rem; align-items: flex-start;
-  flex: 1 1 auto; text-align: left; font-family: inherit; cursor: pointer;
-  background: none; border: none; padding: 0; color: var(--fg);
-}
-.folder-row-name { font-weight: 700; font-size: 1.02rem; }
-.folder-row-flaw { font-size: 0.9rem; color: var(--muted); }
 
-.detail-back {
-  display: inline-block; margin-bottom: 1rem; padding: 0.5rem 0.9rem;
-  font-size: 1rem; font-family: inherit; font-weight: 700; cursor: pointer;
-  color: var(--accent); background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm);
+/* --- Review screen (one label at a time) --- */
+.review-back { margin-bottom: 1rem; }
+.review-progress { margin: 0 0 0.4rem; font-size: 0.9rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.review-banner {
+  padding: 1rem 1.2rem; margin-bottom: 1.1rem; font-size: 1.15rem; font-weight: 700; line-height: 1.45;
+  color: #fff; background: var(--primary); border-radius: var(--radius);
 }
-.detail-title { font-size: 1.35rem; margin: 0 0 0.9rem; }
-
-/* Triage action buttons (approve / reject / tool-was-wrong) */
-.row-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; flex: none; }
-.act {
-  padding: 0.55rem 1rem; font-size: 1rem; font-weight: 700; font-family: inherit;
-  border: 1px solid transparent; border-radius: var(--radius-sm); cursor: pointer; white-space: nowrap;
-}
-.act-approve { color: #fff; background: var(--pass-fg); }
-.act-approve:hover { background: #0e5624; }
-.act-reject { color: #fff; background: var(--fail-fg); }
-.act-reject:hover { background: #85121a; }
-.act-toolerr { color: var(--review-fg); background: var(--review-bg); border-color: #e6d08a; }
-.act-toolerr:hover { background: #f6e6b8; }
-
-.detail-decision { margin-top: 1.5rem; padding-top: 1.25rem; border-top: 2px solid var(--border); }
-.decision-prompt { margin: 0 0 0.6rem; font-weight: 700; }
-.detail-decision .row-actions { margin-bottom: 0.75rem; }
-.note-input {
-  width: 100%; max-width: 480px; padding: 0.6rem 0.7rem; font-size: 1rem; font-family: inherit;
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
-}
-.note-input:focus { outline: none; box-shadow: var(--focus); border-color: var(--accent); }
+.review-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; align-items: start; }
+@media (max-width: 760px) { .review-grid { grid-template-columns: 1fr; } }
+.review-photo { padding: 0.75rem; display: flex; align-items: center; justify-content: center; background: var(--panel); }
+.review-photo img { max-width: 100%; max-height: 460px; border-radius: var(--radius-sm); display: block; }
+.review-info { display: flex; flex-direction: column; gap: 1rem; }
+.review-app { padding: 1rem 1.15rem; }
+.review-app-label { margin: 0 0 0.35rem; font-size: 0.85rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.review-app-value { margin: 0; font-size: 1.15rem; font-weight: 700; word-break: break-word; }
+.review-why { margin: 0; padding: 0.85rem 1.05rem; font-size: 1rem; color: var(--review-fg); background: var(--review-bg); border-radius: var(--radius-sm); }
+.review-details { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--card); }
+.review-details summary { padding: 0.7rem 1rem; cursor: pointer; font-weight: 700; color: var(--accent); }
+.review-details[open] summary { border-bottom: 1px solid var(--border); }
+.review-details .detail-table { border: none; box-shadow: none; border-radius: 0; }
+.review-actions { display: flex; gap: 0.9rem; margin-top: 0.5rem; }
+.review-actions .btn { flex: 1 1 0; padding: 1rem 1.2rem; font-size: 1.15rem; }

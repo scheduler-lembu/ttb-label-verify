@@ -12,6 +12,9 @@
     <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 2.3V11c0 4.6-3 7.9-7 9.2-4-1.3-7-4.6-7-9.2V5.3L12 3z"/><path d="M8.7 12l2.3 2.3L15.4 9.6"/></symbol>
     <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 16l5-4 4 3 3-2 6 5"/><circle cx="8.5" cy="9" r="1.4"/></symbol>
     <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M4 15v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></symbol>
+    <symbol id="i-bucket" viewBox="0 0 24 24"><path d="M3 4h7l2 2h9v3H3z"/><path d="M4 9h16l-1.2 10.2a1 1 0 01-1 .8H6.2a1 1 0 01-1-.8L4 9z"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3l9 16H3L12 3z"/><path d="M12 10v4"/><path d="M12 17.2v.2"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol>
   </svg>
 
   <header class="site-header">
@@ -27,7 +30,7 @@
   <main class="page">
     <header class="head">
       <h1>Check a batch of labels</h1>
-      <p class="tagline">Check many labels at once. Clean labels clear themselves; the ones that need you are grouped by problem.</p>
+      <p class="tagline">Check many labels at once. Clean labels clear themselves; the rest are grouped by which field needs a look.</p>
       <p><a class="back-link" href="/">&larr; Check a single label instead</a></p>
     </header>
 
@@ -57,33 +60,42 @@
     <section class="results" id="batch-results" hidden>
       <div class="triage-summary" id="triage-summary">Starting&hellip;</div>
       <div class="triage-reviewed" id="triage-reviewed" hidden></div>
-      <button type="button" class="undo-last" id="undo-last" hidden>&#8630; Undo last</button>
-
-      <!-- Completion state: shown when every folder is empty. -->
+      <div class="triage-flash" id="triage-flash" role="status" hidden></div>
       <div class="triage-done" id="triage-done" hidden></div>
 
-      <!-- Folders: one card per problem type; only non-empty folders render. -->
-      <div class="folders" id="folders"></div>
+      <!-- One card per non-empty bucket (a field that needs a human). -->
+      <div class="buckets" id="buckets"></div>
 
-      <!-- Detail panel: the full per-field readout for one label (drill-down). -->
-      <section class="detail-panel" id="detail-panel" aria-label="Label detail" hidden>
-        <button type="button" class="detail-back" id="detail-back">&larr; Back to folders</button>
-        <h2 class="detail-title" id="detail-title"></h2>
-        <table class="detail-table">
-          <thead>
-            <tr><th>Field</th><th>On the label</th><th>Expected</th><th>Result</th></tr>
-          </thead>
-          <tbody id="detail-tbody"></tbody>
-        </table>
-        <div class="detail-decision">
-          <p class="decision-prompt">Your decision for this label:</p>
-          <div class="row-actions">
-            <button type="button" class="act act-approve" id="detail-approved">Approve</button>
-            <button type="button" class="act act-reject" id="detail-rejected">Reject</button>
-            <button type="button" class="act act-toolerr" id="detail-tool_error">Tool was wrong</button>
+      <!-- Focused, one-label-at-a-time review screen for a bucket. -->
+      <section class="review-screen" id="review-screen" aria-label="Review" hidden>
+        <button type="button" class="btn btn--secondary review-back" id="review-back">&larr; Back to buckets</button>
+        <p class="review-progress" id="review-progress"></p>
+        <div class="review-banner" id="review-banner"></div>
+
+        <div class="review-grid">
+          <div class="review-photo card">
+            <img id="review-img" alt="Submitted label image" />
           </div>
-          <input type="text" class="note-input" id="detail-note"
-                 placeholder="Optional note (if the tool was wrong)" />
+          <div class="review-info">
+            <div class="review-app card">
+              <p class="review-app-label" id="review-app-label">What the application says</p>
+              <p class="review-app-value" id="review-app-value"></p>
+            </div>
+            <p class="review-why" id="review-why"></p>
+
+            <details class="review-details">
+              <summary>View full label details</summary>
+              <table class="detail-table">
+                <thead><tr><th>Field</th><th>On the label</th><th>Expected</th><th>Result</th></tr></thead>
+                <tbody id="review-fulltbody"></tbody>
+              </table>
+            </details>
+
+            <div class="review-actions">
+              <button type="button" class="btn btn--success" id="review-approve">Approve</button>
+              <button type="button" class="btn btn--danger" id="review-reject">Reject</button>
+            </div>
+          </div>
         </div>
       </section>
     </section>

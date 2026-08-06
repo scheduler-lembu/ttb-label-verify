@@ -19,18 +19,23 @@ import json
 import os
 import uuid
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sse_starlette.sse import EventSourceResponse
 
-from app.batch import build_demo_items, build_uploaded_items, run_batch_stream
+from app.batch import (
+    build_demo_items,
+    build_uploaded_items,
+    image_bytes_for,
+    run_batch_stream,
+)
 from app.config import get_settings
 from app.data_source import get_application_source
 from app.fields import FIELD_REGISTRY
 from app.models import LabelResult, ResultState
-from app.triage import folder_tags_for, is_clean
+from app.triage import bucket_tags_for, is_clean
 from app.verify import verify_label
 
 app = FastAPI(title="TTB Label Verification")
@@ -127,9 +132,9 @@ def _batch_item_payload(item, result: LabelResult):
         "overall": result.overall.value,
         "overall_label": VERDICT_LABELS.get(result.overall, result.overall.value),
         "attention": "; ".join(attention) if attention else "All fields pass",
-        # Triage: which problem-folders this label belongs in, whether it auto-clears,
-        # and the full per-field readout for the drill-down detail panel.
-        "folder_tags": [t.model_dump() for t in folder_tags_for(result)],
+        # Triage: which per-field buckets this label belongs in, whether it
+        # auto-clears, and the full per-field readout for the review-screen detail.
+        "bucket_tags": [t.model_dump() for t in bucket_tags_for(result)],
         "clean": is_clean(result),
         "fields": _build_rows(result),
     }
@@ -236,6 +241,33 @@ async def batch_create(request: Request):
     job_id = uuid.uuid4().hex
     BATCH_JOBS[job_id] = items
     return JSONResponse({"job_id": job_id, "item_count": len(items), "pairing_errors": pairing_errors})
+
+
+def _sniff_image_mime(data: bytes) -> str:
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return "image/png"
+
+
+@app.get("/batch/{job_id}/image/{image_filename}")
+async def batch_image(job_id: str, image_filename: str):
+    """Serve one label's submitted photo for the triage review screen.
+
+    Safe lookup only: the item is found by EXACT image_filename match within the
+    job's stored items (never a filesystem path built from the URL), so unknown
+    names or traversal strings return 404.
+    """
+    items = BATCH_JOBS.get(job_id)
+    if items is None:
+        return JSONResponse({"error": "Unknown or expired batch."}, status_code=404)
+    data = image_bytes_for(items, image_filename)
+    if data is None:
+        return JSONResponse({"error": "Image not found in this batch."}, status_code=404)
+    return Response(content=data, media_type=_sniff_image_mime(data))
 
 
 @app.get("/batch/{job_id}/stream")
