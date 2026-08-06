@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TTB Batch Verification</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="page">
+    <header class="head">
+      <h1>Check a batch of labels</h1>
+      <p class="tagline">Check many labels at once. Clean labels clear themselves; the ones that need you are grouped by problem.</p>
+      <p><a class="back-link" href="/">&larr; Check a single label instead</a></p>
+    </header>
+
+    <section class="batch-entry">
+      <div class="entry-card">
+        <h2>Try the demo</h2>
+        <p>Run the {{ demo_count or 300 }} built-in sample labels — no files needed.</p>
+        <button type="button" id="demo-button" class="primary-button">Run the demo batch</button>
+      </div>
+
+      <div class="entry-card">
+        <h2>Use your own</h2>
+        <p>Upload a CSV of expected values and the label images (matched by file name).</p>
+        <p><a href="/template.csv" download>Download the CSV template</a></p>
+        <form id="upload-form">
+          <label class="upload-sub" for="csv-file">Expected-values CSV</label>
+          <input type="file" id="csv-file" name="csv_file" accept=".csv" />
+          <label class="upload-sub" for="images-file">Label images (select all)</label>
+          <input type="file" id="images-file" name="images" accept="image/*" multiple />
+          <button type="submit" class="primary-button secondary">Check my batch</button>
+        </form>
+      </div>
+    </section>
+
+    <div class="error-banner" id="batch-error" role="alert" hidden></div>
+
+    <section class="results" id="batch-results" hidden>
+      <div class="triage-summary" id="triage-summary">Starting&hellip;</div>
+
+      <!-- Folders: one card per problem type; only non-empty folders render. -->
+      <div class="folders" id="folders"></div>
+
+      <!-- Detail panel: the full per-field readout for one label (drill-down). -->
+      <section class="detail-panel" id="detail-panel" aria-label="Label detail" hidden>
+        <button type="button" class="detail-back" id="detail-back">&larr; Back to folders</button>
+        <h2 class="detail-title" id="detail-title"></h2>
+        <table class="detail-table">
+          <thead>
+            <tr><th>Field</th><th>On the label</th><th>Expected</th><th>Result</th></tr>
+          </thead>
+          <tbody id="detail-tbody"></tbody>
+        </table>
+      </section>
+    </section>
+  </main>
+
+  <script src="/static/batch.js"></script>
+</body>
+</html>

@@ -6,6 +6,8 @@ repo root (pytest runs from there).
 
 from __future__ import annotations
 
+import csv
+
 from app.data_source import DemoCsvSource
 from app.fields import FIELD_REGISTRY
 
@@ -13,8 +15,14 @@ CSV_PATH = "sample_data/demo_applications.csv"
 _REGISTRY_KEYS = {f.key for f in FIELD_REGISTRY}
 
 
-def test_lists_ten_applications():
-    assert len(DemoCsvSource(CSV_PATH).list_applications()) == 10
+def _csv_row_count() -> int:
+    with open(CSV_PATH, newline="", encoding="utf-8") as fh:
+        return sum(1 for _ in csv.DictReader(fh))
+
+
+def test_lists_all_applications():
+    # Count-agnostic: one Application per row in the demo DB (~300).
+    assert len(DemoCsvSource(CSV_PATH).list_applications()) == _csv_row_count()
 
 
 def test_get_known_application():

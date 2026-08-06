@@ -55,6 +55,7 @@ limitation as we build, so the final README writeup is already done and every
 | D-19 | **Graceful OCR fallback** | If the Tesseract binary is unavailable, the cross-check is skipped and the warning falls back to the vision read (the #4 behavior) | The cross-check is an enhancement, not a hard dependency; local dev without the binary still runs | Without Tesseract the false-PASS protection is prompt-only | The deployed container ships Tesseract so production always has the cross-check |
 | D-20 | **Single-label latency hardening** | Disable SDK retries (max_retries=0); a generous per-request hang-ceiling timeout (stall → NEEDS_REVIEW); cap output tokens; downscale oversized images before the vision call | The retry-balloon pushed a slow call past the bar; typical latency (~2-3s median) meets NFR-01, and downscaling keeps real phone photos fast and cheap | A genuinely slow single attempt can still take up to the hang-ceiling; the ~5s is met by typical latency, not a hard guillotine | Faster model tier / streaming in production |
 | D-21 | **UI: server-rendered single page** | One page: an upload zone, an expected-values form (the 6 typed fields), one primary button, and a color-coded extracted-vs-expected results table with an overall banner; the Government Warning has no input (checked against the canonical text). Progressive-enhancement JS (filename/thumbnail/"Checking…" state) only — the plain form works with JS off | Meets the no-training / 73-year-old bar (NFR-03): one obvious action, no hunting; robust because the core works without JavaScript | A full-page reload clears the file input, so re-checking the same image after editing a value needs re-selecting it | JS fetch (no reload) or a richer role-based UI in production |
+| D-22 | **Batch = concurrent + progressively streamed** | Many label+application pairs in one submission; each paired to its image by filename; verified CONCURRENTLY under a capped pool (MAX_CONCURRENCY) reusing verify_label unchanged; each result streamed to the browser via SSE as it finishes; ends with pass/fail/needs-review counts. Two entry modes: a one-click demo (the bundled demo DB paired to the on-disk catalog images) and a CSV+images upload | Meets FR-10/11 + NFR-02 (progressive, never blocked); the same graded engine judges single and batch, so verdicts are identical | Batch requires JavaScript (SSE); jobs are in-memory and dropped after streaming; no image-hash dedup and it runs on PRIMARY_MODEL (not the cheaper BATCH_MODEL) at demo scale | Cheap batch model (Luna), image-hash dedup, per-batch cost ceiling, and a queue/worker system for sustained volume |
 
 ---
 
@@ -153,6 +154,9 @@ limitation as we build, so the final README writeup is already done and every
     result the browser clears the file input, so re-checking the same image with
     edited expected values requires re-selecting the image. Minor; a no-reload JS
     submit is the production refinement.
+16. **Batch results stream via SSE and therefore require JavaScript** (the
+    single-label page works without it). Batch jobs are held in memory and dropped
+    after the stream completes — no persistence (D-8/CON-02).
 
 ---
 

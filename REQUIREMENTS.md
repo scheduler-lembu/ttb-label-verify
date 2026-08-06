@@ -63,6 +63,12 @@ plus a publicly testable deployed URL.
 | FR-12 | C | allow the agent to **override** an automated result (human-in-the-loop). | Demo | R19 |
 | FR-13 | S | categorize each NEEDS_REVIEW / FAIL result with a machine-readable reason code (blank, unreadable, borderline, special-character, warning-prefix, wording, mismatch, ...) to support triage and grouping. | Test | stakeholder efficiency |
 
+**Note on FR-10/11:** Batch is provided at `/batch`: many label+application pairs in
+one submission (a one-click demo over the bundled application DB, or an uploaded CSV
+of expected values + label images paired by filename), verified concurrently under a
+capped pool, with per-item results streamed progressively (NFR-02) and a final
+pass/fail/needs-review summary (FR-11).
+
 ---
 
 ## 5. Matching & Verification Rules (MR)

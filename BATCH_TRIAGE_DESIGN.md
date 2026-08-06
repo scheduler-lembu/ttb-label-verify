@@ -1,14 +1,9 @@
 # Batch Triage & Data-Source — Design Direction (Documented Target)
 ## TTB AI Label Verification Prototype — Working Document
 
-> **STATUS: DOCUMENTED TARGET — not yet the built product.** This records the north-star
-> product direction (batch-in / exceptions-out triage queue) agreed as where the tool is
-> headed. The team is deliberately finishing the required core first — single-label UI
-> (done), this data-source layer, batch (#6), and deploy (#7) — and will build the
-> exception-folder triage queue on top of the deployed core afterward. This document does
-> NOT supersede the phase order in PROJECT_HANDOFF; when the pivot begins, this graduates
-> from target to in-build. Treated like the FB-1 note: on the record, showing the
-> thinking, marked "next, not now."
+> **STATUS: IN BUILD — Phase 3 (exception-folder triage) started.** Read-only folder view first
+> (batch sorts into folders by reason code, clean items auto-clear, click a label for the full
+> per-field detail); approve/reject/note click-through is the next pass.
 
 ---
 
