@@ -71,6 +71,61 @@ def test_post_batch_upload_no_csv_errors():
     assert "CSV" in r.json()["error"]
 
 
+def test_demo_run_image_and_reverify(monkeypatch):
+    """Real demo-run path: image + re-ingest resolve a DEMO job (the UAT bug)."""
+    from app import verify as verify_mod
+    from app.extraction.base import ExtractionResult
+
+    job = client.post("/batch", data={"mode": "demo"}).json()["job_id"]
+
+    im = client.get(f"/batch/{job}/image/demo_0001.png")
+    assert im.status_code == 200
+    assert im.headers["content-type"] == "image/png"
+    assert len(im.content) > 1000
+    assert client.get(f"/batch/{job}/image/nope.png").status_code == 404
+
+    def fake_extract(image_bytes):
+        return ExtractionResult(fields={
+            "brand": "WRONG", "alcohol_content": "45%", "warning": None,
+            "class_type": "Kentucky Straight Bourbon Whiskey", "net_contents": "750 mL",
+            "producer": "Old Tom Distillery, Louisville, KY", "country_of_origin": "",
+        }, ok=True)
+    monkeypatch.setattr(verify_mod, "extract_single", fake_extract)
+
+    rv = client.post(f"/batch/{job}/reverify/demo_0001.png")
+    assert rv.status_code == 200
+    assert set(["fields", "bucket_tags", "clean"]).issubset(rv.json())
+    assert client.post(f"/batch/{job}/reverify/nope.png").status_code == 404
+
+
+def test_stream_keeps_job_after_completion(monkeypatch):
+    """The stream must NOT drop the job — image/re-ingest need it after streaming."""
+    from app.extraction import router
+    from app.extraction.base import ExtractionResult
+    from app.main import BATCH_JOBS
+
+    keys = ["brand", "alcohol_content", "warning", "class_type",
+            "net_contents", "producer", "country_of_origin"]
+
+    class _Fake:
+        def extract(self, image_bytes):
+            return ExtractionResult(fields={k: "" for k in keys}, ok=True)
+
+    monkeypatch.setattr(router, "get_batch_extractor", lambda: _Fake())
+    items, _ = build_demo_items()
+    BATCH_JOBS["streamjob"] = items[:2]
+
+    with client.stream("GET", "/batch/streamjob/stream") as resp:
+        assert resp.status_code == 200
+        for _ in resp.iter_lines():
+            pass
+
+    assert "streamjob" in BATCH_JOBS  # survived streaming (was popped before the fix)
+    im = client.get(f"/batch/streamjob/image/{items[0].image_filename}")
+    assert im.status_code == 200
+    assert im.headers["content-type"].startswith("image/")
+
+
 def test_reverify_endpoint_offline(monkeypatch):
     """POST /batch/{job}/reverify/{filename} runs the single-label path with a
     MOCKED extractor (no real model) and returns {fields, bucket_tags, clean}."""

@@ -62,8 +62,11 @@ VERDICT_LABELS = {
     ResultState.NEEDS_REVIEW: "Needs review",
 }
 
-# In-memory batch jobs (single-process prototype; dropped after streaming).
+# In-memory batch jobs (single-process prototype). Jobs persist past streaming so
+# the review screen's image + re-ingest endpoints keep resolving; retention is
+# bounded (oldest evicted) in batch_create.
 BATCH_JOBS: dict = {}
+MAX_RETAINED_JOBS = 12
 BATCH_TEMPLATE_PATH = "sample_data/batch_template.csv"
 FAVICON_PATH = "app/static/favicon.svg"
 
@@ -240,6 +243,12 @@ async def batch_create(request: Request):
     if not items:
         return JSONResponse({"error": "No labels to check.", "pairing_errors": pairing_errors}, status_code=400)
 
+    # Bound retained jobs (jobs now persist past streaming so image/re-ingest
+    # keep working): evict the oldest when over the cap. Single-process prototype.
+    while len(BATCH_JOBS) >= MAX_RETAINED_JOBS:
+        oldest = next(iter(BATCH_JOBS))
+        BATCH_JOBS.pop(oldest, None)
+
     job_id = uuid.uuid4().hex
     BATCH_JOBS[job_id] = items
     return JSONResponse({"job_id": job_id, "item_count": len(items), "pairing_errors": pairing_errors})
@@ -308,18 +317,18 @@ async def batch_stream(job_id: str):
     settings = get_settings()
 
     async def event_gen():
+        # NOTE: the job is intentionally NOT dropped when the stream ends — the
+        # review screen's image + re-ingest endpoints need it to persist AFTER
+        # streaming. Retention is bounded in batch_create (oldest job evicted).
         counts = {"PASS": 0, "FAIL": 0, "NEEDS_REVIEW": 0}
-        try:
-            async for item, result in run_batch_stream(items, settings.MAX_CONCURRENCY):
-                counts[result.overall.value] = counts.get(result.overall.value, 0) + 1
-                yield {"event": "item", "data": json.dumps(_batch_item_payload(item, result))}
-            yield {"event": "summary", "data": json.dumps({
-                "total": len(items),
-                "pass": counts["PASS"],
-                "fail": counts["FAIL"],
-                "needs_review": counts["NEEDS_REVIEW"],
-            })}
-        finally:
-            BATCH_JOBS.pop(job_id, None)
+        async for item, result in run_batch_stream(items, settings.MAX_CONCURRENCY):
+            counts[result.overall.value] = counts.get(result.overall.value, 0) + 1
+            yield {"event": "item", "data": json.dumps(_batch_item_payload(item, result))}
+        yield {"event": "summary", "data": json.dumps({
+            "total": len(items),
+            "pass": counts["PASS"],
+            "fail": counts["FAIL"],
+            "needs_review": counts["NEEDS_REVIEW"],
+        })}
 
     return EventSourceResponse(event_gen())

@@ -31,7 +31,6 @@
   var reviewAppLabel = document.getElementById("review-app-label");
   var reviewAppValue = document.getElementById("review-app-value");
   var reviewWhy = document.getElementById("review-why");
-  var reviewFullTbody = document.getElementById("review-fulltbody");
   var approveBtn = document.getElementById("review-approve");
   var rejectBtn = document.getElementById("review-reject");
 
@@ -65,6 +64,10 @@
 
   var state;
   var recordCards = { cleared: null, rejected: null };
+  var pendingFlash = null;
+
+  // Strip any stale hash on load so a hard refresh lands on a clean overview.
+  try { history.replaceState({ view: "overview" }, "", location.pathname); } catch (e) {}
 
   function showError(msg) { errorBox.textContent = msg; errorBox.hidden = false; }
   function clearError() { errorBox.hidden = true; errorBox.textContent = ""; }
@@ -104,6 +107,8 @@
     updateBell();
     resultsSec.hidden = false;
     summaryEl.textContent = "Starting…";
+    // Normalize history to the overview base for this batch session.
+    try { history.replaceState({ view: "overview" }, "", location.pathname); } catch (e) {}
   }
 
   function updateSummary(done) {
@@ -121,11 +126,42 @@
   function clearFlash() { flashEl.hidden = true; flashEl.textContent = ""; }
 
   function showOverview() {
-    clearFlash();
     reviewScreen.hidden = true; listScreen.hidden = true;
     bucketsEl.hidden = false; recordsSection.hidden = false;
+    if (pendingFlash) { flash(pendingFlash); pendingFlash = null; } else { clearFlash(); }
     checkCompletion();
   }
+
+  // --- History routing: each opened bucket / list is its own page (own URL) ---
+  function hashFor(route) {
+    if (route.view === "bucket") return "#bucket/" + route.id;
+    if (route.view === "list") return "#records/" + route.type;
+    return "#";
+  }
+  function goBucket(id, start) {
+    var b = state.buckets[id];
+    if (!b || b.appIds.length === 0) return;
+    history.pushState({ view: "bucket", id: id, start: start || null }, "", hashFor({ view: "bucket", id: id }));
+    openBucket(id, start);
+  }
+  function goList(type, highlight) {
+    history.pushState({ view: "list", type: type, highlight: highlight || null }, "", hashFor({ view: "list", type: type }));
+    openList(type, highlight);
+  }
+  function renderRoute(route) {
+    if (!state) return;   // no batch yet — nothing to route to
+    route = route || { view: "overview" };
+    if (route.view === "bucket") {
+      var b = state.buckets[route.id];
+      if (b && b.appIds.length > 0) openBucket(route.id, route.start);
+      else showOverview();
+    } else if (route.view === "list") {
+      openList(route.type, route.highlight);
+    } else {
+      showOverview();
+    }
+  }
+  window.addEventListener("popstate", function (ev) { renderRoute(ev.state); });
   function checkCompletion() {
     if (state.flaggedTotal > 0 && state.attention === 0) {
       reviewScreen.hidden = true; listScreen.hidden = true;
@@ -148,7 +184,7 @@
     var name = document.createElement("span"); name.className = "bucket-name"; name.textContent = bLabel(tag.bucket_id);
     var count = document.createElement("span"); count.className = "bucket-count"; count.textContent = "0";
     card.appendChild(icon); card.appendChild(name); card.appendChild(count);
-    card.addEventListener("click", function () { openBucket(tag.bucket_id); });
+    card.addEventListener("click", function () { goBucket(tag.bucket_id); });
     bucketsEl.appendChild(card);
     b = { id: tag.bucket_id, appIds: [], card: card, countEl: count };
     state.buckets[tag.bucket_id] = b; state.bucketOrder.push(tag.bucket_id);
@@ -180,7 +216,7 @@
     var name = document.createElement("span"); name.className = "bucket-name"; name.textContent = label;
     var count = document.createElement("span"); count.className = "bucket-count"; count.textContent = "0";
     card.appendChild(icon); card.appendChild(name); card.appendChild(count);
-    card.addEventListener("click", function () { openList(type); });
+    card.addEventListener("click", function () { goList(type); });
     recordBucketsEl.appendChild(card);
     return { countEl: count };
   }
@@ -227,21 +263,6 @@
       default: return tag.note || "This field needs a review.";
     }
   }
-  function renderFullDetails(app) {
-    reviewFullTbody.innerHTML = "";
-    (app.item.fields || []).forEach(function (row) {
-      var tr = document.createElement("tr");
-      var f = document.createElement("td"); f.className = "cell-field"; f.textContent = row.label;
-      var xx = document.createElement("td"); xx.className = "cell-val"; xx.textContent = row.extracted;
-      var ee = document.createElement("td"); ee.className = "cell-val"; ee.textContent = row.expected;
-      var rr = document.createElement("td"); rr.className = "cell-result";
-      var badge = document.createElement("span"); badge.className = "badge badge-" + row.verdict; badge.textContent = row.verdict_label;
-      rr.appendChild(badge);
-      if (row.reason) { var d = document.createElement("div"); d.className = "reason"; d.textContent = row.reason; rr.appendChild(d); }
-      tr.appendChild(f); tr.appendChild(xx); tr.appendChild(ee); tr.appendChild(rr);
-      reviewFullTbody.appendChild(tr);
-    });
-  }
   function renderReview(appId, bucketId) {
     var app = state.apps[appId]; var tag = tagFor(app, bucketId);
     state.currentApp = appId;
@@ -255,7 +276,6 @@
     reviewAppValue.textContent = (tag && tag.expected) ? tag.expected
       : (bucketId === "unreadable_label" ? "Review the image and decide." : "— (blank) —");
     reviewWhy.textContent = tag ? whyText(tag) : "";
-    renderFullDetails(app);
     bucketsEl.hidden = true; recordsSection.hidden = true; listScreen.hidden = true; doneEl.hidden = true;
     reviewScreen.hidden = false;
   }
@@ -273,7 +293,7 @@
   function advance() {
     var b = state.buckets[state.currentBucket];
     if (b && b.appIds.length > 0) { state.reviewIndex += 1; renderReview(b.appIds[0], state.currentBucket); }
-    else { showOverview(); flash("This bucket is clear."); }
+    else { pendingFlash = "This bucket is clear."; history.back(); }  // back to the overview page
   }
   function approve() {
     var app = state.apps[state.currentApp]; var F = state.currentBucket;
@@ -436,10 +456,10 @@
       if (!next.length) { notif.cycleVisited.clear(); next = current; }
       var target = next[0]; notif.cycleVisited.add(target);
       closeNotifPanel();
-      openBucket(target, app.filename);   // open that bucket ON this app
+      goBucket(target, app.filename);   // open that bucket's PAGE on this app
     } else if (app.record) {
       closeNotifPanel();
-      openList(app.record, app.filename);  // settled -> terminal record bucket, highlighted
+      goList(app.record, app.filename);  // settled -> terminal record bucket page, highlighted
     }
   }
 
@@ -483,12 +503,29 @@
       .catch(function () { resultsSec.hidden = true; showError("Couldn't reach the server."); });
   }
 
-  document.getElementById("review-back").addEventListener("click", showOverview);
+  document.getElementById("review-back").addEventListener("click", function () { history.back(); });
   if (approveBtn) approveBtn.addEventListener("click", approve);
   if (rejectBtn) rejectBtn.addEventListener("click", reject);
-  if (listBack) listBack.addEventListener("click", showOverview);
+  if (listBack) listBack.addEventListener("click", function () { history.back(); });
   if (listSearch) listSearch.addEventListener("input", function () { renderList(state.currentList, this.value); });
   if (notifBell) notifBell.addEventListener("click", toggleNotifPanel);
+
+  // Styled file pickers: reflect the chosen file(s) next to the button.
+  var csvFile = document.getElementById("csv-file");
+  var csvPicked = document.getElementById("csv-picked");
+  var imagesFile = document.getElementById("images-file");
+  var imagesPicked = document.getElementById("images-picked");
+  if (csvFile && csvPicked) {
+    csvFile.addEventListener("change", function () {
+      csvPicked.textContent = csvFile.files[0] ? csvFile.files[0].name : "No file chosen";
+    });
+  }
+  if (imagesFile && imagesPicked) {
+    imagesFile.addEventListener("change", function () {
+      var n = imagesFile.files.length;
+      imagesPicked.textContent = n ? (n + " file" + (n > 1 ? "s" : "") + " chosen") : "No files chosen";
+    });
+  }
 
   if (demoBtn) {
     demoBtn.addEventListener("click", function () { var fd = new FormData(); fd.append("mode", "demo"); submitBatch(fd); });

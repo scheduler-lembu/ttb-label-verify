@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TTB Batch Verification</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/style.css?v=14" />
 </head>
 <body>
   <svg class="svg-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -59,11 +59,21 @@
         <p>Upload a CSV of expected values and the label images (matched by file name).</p>
         <p><a href="/template.csv" download>Download the CSV template</a></p>
         <form id="upload-form">
-          <label class="upload-sub" for="csv-file">Expected-values CSV</label>
-          <input type="file" id="csv-file" name="csv_file" accept=".csv" />
-          <label class="upload-sub" for="images-file">Label images (select all)</label>
-          <input type="file" id="images-file" name="images" accept="image/*" multiple />
-          <button type="submit" class="btn btn--secondary btn--block">Check my batch</button>
+          <span class="upload-sub">Expected-values CSV</span>
+          <div class="file-picker">
+            <label class="btn btn--secondary btn-sm" for="csv-file">Choose CSV&hellip;</label>
+            <span class="file-picked" id="csv-picked">No file chosen</span>
+          </div>
+          <input type="file" id="csv-file" name="csv_file" accept=".csv" class="sr-file" />
+
+          <span class="upload-sub">Label images (select all)</span>
+          <div class="file-picker">
+            <label class="btn btn--secondary btn-sm" for="images-file">Choose images&hellip;</label>
+            <span class="file-picked" id="images-picked">No files chosen</span>
+          </div>
+          <input type="file" id="images-file" name="images" accept="image/*" multiple class="sr-file" />
+
+          <button type="submit" class="btn btn--primary btn--block">Check my batch</button>
         </form>
       </div>
     </section>
@@ -113,14 +123,6 @@
             </div>
             <p class="review-why" id="review-why"></p>
 
-            <details class="review-details">
-              <summary>View full label details</summary>
-              <table class="detail-table">
-                <thead><tr><th>Field</th><th>On the label</th><th>Expected</th><th>Result</th></tr></thead>
-                <tbody id="review-fulltbody"></tbody>
-              </table>
-            </details>
-
             <div class="review-actions">
               <button type="button" class="btn btn--success" id="review-approve">Approve</button>
               <button type="button" class="btn btn--danger" id="review-reject">Reject</button>
@@ -131,6 +133,6 @@
     </section>
   </main>
 
-  <script src="/static/batch.js"></script>
+  <script src="/static/batch.js?v=15"></script>
 </body>
 </html>

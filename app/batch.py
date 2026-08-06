@@ -30,7 +30,10 @@ from app.verify import verify_label_with
 # text, not the application — MA-8 — so it is never a supplied expected value).
 _EXPECTED_KEYS = [f.key for f in FIELD_REGISTRY if f.key != "warning"]
 # The one-click demo pairs the demo application DB (~300) to its images here.
-_DEMO_LABELS_DIR = "demo_labels"
+# Absolute path (relative to the repo root) so it resolves regardless of the
+# server's working directory.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_DEMO_LABELS_DIR = os.path.join(_REPO_ROOT, "demo_labels")
 
 
 @dataclass

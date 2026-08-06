@@ -16,7 +16,11 @@
 > field-error buckets). Each re-ingest posts a result to a header **notification bell** whose **Navigate**
 > button walks the agent through the app's *current* buckets — recomputed on each click — opening each for
 > review and finally landing on its terminal record bucket once it settles. All state is session-only, in
-> memory, no persistence (D-8 / CON-02). **The triage/record feature is now complete; deploy is next.**
+> memory, no persistence (D-8 / CON-02). Clicking a bucket now opens it as a **dedicated page with its own
+> URL** (client-side history routing), so the browser **Back/Forward** buttons move between the overview
+> and each bucket; a hard refresh returns to the empty overview. The built-in demo also includes a few
+> deliberate **multi-flag** labels (wrong on two fields) so the multi-bucket workflow shows without an
+> upload. **The triage/record feature is now complete; deploy is next.**
 
 ---
 
