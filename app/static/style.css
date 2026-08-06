@@ -1,21 +1,14 @@
-/*
- * style.css — minimal, high-contrast, large-font styling (scaffold only).
- *
- * Single responsibility: make the one page usable by a non-technical,
- * first-time user with no training (NFR-03). Large touch/click targets, high
- * contrast, big legible type, one obvious primary action. Intentionally plain;
- * no framework. Final visual polish happens in a later phase.
- */
-
 :root {
   --fg: #12181f;
+  --muted: #5a626c;
   --bg: #ffffff;
+  --panel: #f7f8fa;
   --accent: #0b5fff;
-  --pass: #1a7f37;
-  --fail: #b42318;
-  --review: #9a6700;
   --border: #c8ced6;
-  --font: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  --pass-bg: #e6f4ea; --pass-fg: #12692c;
+  --fail-bg: #fdecea; --fail-fg: #a3161c;
+  --review-bg: #fbf1d3; --review-fg: #7a5600;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -23,58 +16,88 @@
 body {
   margin: 0;
   font-family: var(--font);
-  font-size: 20px;          /* large default for readability */
+  font-size: 18px;
   line-height: 1.5;
   color: var(--fg);
   background: var(--bg);
 }
 
-.page {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 2rem 1.25rem 4rem;
-}
+.page { max-width: 960px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+.head h1 { font-size: 2rem; margin: 0 0 0.25rem; }
+.tagline { color: var(--muted); margin: 0 0 1.75rem; }
 
-h1 { font-size: 2.25rem; margin: 0 0 0.25rem; }
-.tagline { color: #48505a; margin: 0 0 2rem; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; align-items: start; }
+@media (max-width: 680px) { .grid { grid-template-columns: 1fr; } }
 
-/* Big, obvious upload zone */
 .upload-zone {
+  position: relative;
+  background: var(--panel);
   border: 3px dashed var(--border);
   border-radius: 14px;
-  padding: 2.5rem 1.5rem;
-  text-align: center;
-  cursor: pointer;
+  min-height: 200px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 1.25rem;
 }
-.upload-hint { font-size: 1.15rem; margin: 0 0 1rem; }
+.upload-zone.dragover { border-color: var(--accent); background: #eef4ff; }
+.upload-label { text-align: center; cursor: pointer; display: block; width: 100%; }
+.upload-title { display: block; font-size: 1.05rem; color: var(--muted); }
+.file-name { display: block; margin-top: 0.6rem; font-weight: 700; color: var(--fg); word-break: break-all; }
+.file-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.thumb { display: block; max-width: 100%; max-height: 180px; margin: 0.75rem auto 0; border-radius: 8px; }
 
-/* One primary button, large target */
+.fields { background: var(--panel); border-radius: 14px; padding: 1.1rem 1.2rem; }
+.fields-title { margin: 0 0 0.75rem; font-size: 0.95rem; font-weight: 700; color: var(--muted); }
+.field { margin-bottom: 0.7rem; }
+.field label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.2rem; }
+.field .muted { color: #99a0aa; }
+.field input {
+  width: 100%; padding: 0.6rem 0.7rem; font-size: 1rem; font-family: inherit;
+  color: var(--fg); background: #fff; border: 1px solid var(--border); border-radius: 8px;
+}
+.field input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+
+.warning-note {
+  margin: 1rem 0 0; font-size: 0.9rem; color: var(--muted);
+  background: var(--panel); border-radius: 10px; padding: 0.7rem 0.9rem;
+}
+
 .primary-button {
-  display: block;
-  width: 100%;
-  margin: 1.5rem 0 0;
-  padding: 1.1rem 1.5rem;
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: #fff;
-  background: var(--accent);
-  border: none;
-  border-radius: 12px;
-  cursor: pointer;
+  display: block; width: 100%; margin: 1.25rem 0 0;
+  padding: 1rem 1.5rem; font-size: 1.2rem; font-weight: 700; font-family: inherit;
+  color: #fff; background: var(--accent); border: none; border-radius: 12px; cursor: pointer;
 }
-.primary-button:disabled { opacity: 0.5; cursor: not-allowed; }
+.primary-button:hover { background: #0a54e0; }
+.primary-button:disabled { opacity: 0.6; cursor: default; }
 
-/* Results table */
-.results { margin-top: 2.5rem; }
+.error-banner {
+  margin: 1.5rem 0 0; padding: 0.9rem 1.1rem; font-weight: 700;
+  color: var(--fail-fg); background: var(--fail-bg);
+  border: 1px solid #f2b8b5; border-radius: 12px;
+}
+
+.results { margin-top: 2rem; }
+.overall {
+  padding: 0.9rem 1.1rem; font-size: 1.2rem; font-weight: 700;
+  border-radius: 12px; margin-bottom: 1rem;
+}
+.overall-PASS { color: var(--pass-fg); background: var(--pass-bg); }
+.overall-FAIL { color: var(--fail-fg); background: var(--fail-bg); }
+.overall-NEEDS_REVIEW { color: var(--review-fg); background: var(--review-bg); }
+
 #results-table { width: 100%; border-collapse: collapse; }
-#results-table th,
-#results-table td {
-  text-align: left;
-  padding: 0.85rem 0.75rem;
-  border-bottom: 1px solid var(--border);
+#results-table th, #results-table td {
+  text-align: left; padding: 0.8rem 0.7rem; border-bottom: 1px solid var(--border); vertical-align: top;
 }
+#results-table th { font-size: 0.85rem; color: var(--muted); font-weight: 700; }
+.cell-field { font-weight: 700; white-space: nowrap; }
+.cell-val { color: #3a424c; word-break: break-word; }
+.cell-result { white-space: nowrap; }
 
-/* Verdict colors (applied to result cells later) */
-.state-PASS { color: var(--pass); font-weight: 700; }
-.state-FAIL { color: var(--fail); font-weight: 700; }
-.state-NEEDS_REVIEW { color: var(--review); font-weight: 700; }
+.badge {
+  display: inline-block; padding: 0.15rem 0.7rem; border-radius: 999px;
+  font-size: 0.85rem; font-weight: 700;
+}
+.badge-PASS { color: var(--pass-fg); background: var(--pass-bg); }
+.badge-FAIL { color: var(--fail-fg); background: var(--fail-bg); }
+.badge-NEEDS_REVIEW { color: var(--review-fg); background: var(--review-bg); }
+.reason { margin-top: 0.35rem; font-size: 0.8rem; color: var(--muted); white-space: normal; max-width: 220px; }

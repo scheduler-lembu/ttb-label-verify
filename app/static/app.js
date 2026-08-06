@@ -1,36 +1,45 @@
-/*
- * app.js — client-side upload + result rendering (scaffold only; no logic).
- *
- * Single responsibility: wire the one page. Later phases implement:
- *   - single: POST the image + form values to /verify, render the per-field
- *     results table (extracted vs expected vs verdict).
- *   - batch: POST the CSV + images to /batch and consume an SSE stream,
- *     APPENDING each result row as it arrives (progressive results, NFR-02),
- *     then show the final summary counts.
- *
- * No behavior in this pass — these are placeholder stubs so the page loads.
- */
-
 "use strict";
 
-// Enable the primary button once a file is chosen. (Wired in a later phase.)
-function initUpload() {
-  // TODO: attach file-input + drag/drop handlers; toggle #verify-button.
-}
+(function () {
+  var fileInput = document.getElementById("label-file");
+  var fileName = document.getElementById("file-name");
+  var thumb = document.getElementById("thumb");
+  var zone = document.getElementById("upload-zone");
+  var form = document.getElementById("verify-form");
+  var button = document.getElementById("verify-button");
 
-// Single-label: send to /verify and render results. (Later phase.)
-function verifySingle() {
-  // TODO: POST multipart to /verify; render FieldResult rows.
-}
+  function showFile(file) {
+    if (!file) return;
+    if (fileName) fileName.textContent = file.name;
+    if (thumb && file.type && file.type.indexOf("image/") === 0) {
+      thumb.src = URL.createObjectURL(file);
+      thumb.hidden = false;
+    }
+  }
 
-// Batch: open an SSE connection to /batch and append rows as they stream in.
-function runBatchStream() {
-  // TODO: EventSource('/batch'); on each message append a row; on end show summary.
-}
+  if (fileInput) {
+    fileInput.addEventListener("change", function () {
+      if (fileInput.files && fileInput.files[0]) showFile(fileInput.files[0]);
+    });
+  }
 
-// Render one field's result row into #results-table. (Later phase.)
-function appendResultRow(/* fieldResult */) {
-  // TODO: build a <tr> with expected / extracted / state-<STATE> cells.
-}
+  if (zone) {
+    ["dragenter", "dragover"].forEach(function (ev) {
+      zone.addEventListener(ev, function (e) { e.preventDefault(); zone.classList.add("dragover"); });
+    });
+    ["dragleave", "drop"].forEach(function (ev) {
+      zone.addEventListener(ev, function (e) { e.preventDefault(); zone.classList.remove("dragover"); });
+    });
+    zone.addEventListener("drop", function (e) {
+      var files = e.dataTransfer && e.dataTransfer.files;
+      if (files && files[0] && fileInput) { fileInput.files = files; showFile(files[0]); }
+    });
+  }
 
-document.addEventListener("DOMContentLoaded", initUpload);
+  if (form && button) {
+    form.addEventListener("submit", function () {
+      button.disabled = true;
+      button.textContent = "Checking… (about 5 seconds)";
+    });
+  }
+})();

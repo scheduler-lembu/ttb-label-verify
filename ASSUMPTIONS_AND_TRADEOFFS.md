@@ -54,6 +54,7 @@ limitation as we build, so the final README writeup is already done and every
 | D-18 | **Cross-check is one-directional (safety-only)** | The cross-check can only move a warning PASS → NEEDS_REVIEW; it never relaxes a FAIL/REVIEW, and the strict verdict still runs on the vision read via the unchanged matcher | Keeps the graded matcher frozen and the change strictly conservative | A compliant warning misread by OCR may be flagged for a human (visible, overridable) | Tune threshold with real data |
 | D-19 | **Graceful OCR fallback** | If the Tesseract binary is unavailable, the cross-check is skipped and the warning falls back to the vision read (the #4 behavior) | The cross-check is an enhancement, not a hard dependency; local dev without the binary still runs | Without Tesseract the false-PASS protection is prompt-only | The deployed container ships Tesseract so production always has the cross-check |
 | D-20 | **Single-label latency hardening** | Disable SDK retries (max_retries=0); a generous per-request hang-ceiling timeout (stall → NEEDS_REVIEW); cap output tokens; downscale oversized images before the vision call | The retry-balloon pushed a slow call past the bar; typical latency (~2-3s median) meets NFR-01, and downscaling keeps real phone photos fast and cheap | A genuinely slow single attempt can still take up to the hang-ceiling; the ~5s is met by typical latency, not a hard guillotine | Faster model tier / streaming in production |
+| D-21 | **UI: server-rendered single page** | One page: an upload zone, an expected-values form (the 6 typed fields), one primary button, and a color-coded extracted-vs-expected results table with an overall banner; the Government Warning has no input (checked against the canonical text). Progressive-enhancement JS (filename/thumbnail/"Checking…" state) only — the plain form works with JS off | Meets the no-training / 73-year-old bar (NFR-03): one obvious action, no hunting; robust because the core works without JavaScript | A full-page reload clears the file input, so re-checking the same image after editing a value needs re-selecting it | JS fetch (no reload) or a richer role-based UI in production |
 
 ---
 
@@ -148,6 +149,10 @@ limitation as we build, so the final README writeup is already done and every
     approach ~5s and rely on typical latency (not a hard cap) to meet NFR-01. A
     per-request hang-ceiling prevents indefinite waits by degrading a stalled call
     to NEEDS_REVIEW.
+15. **The single-label UI is server-rendered** (full-page form POST); after a
+    result the browser clears the file input, so re-checking the same image with
+    edited expected values requires re-selecting the image. Minor; a no-reload JS
+    submit is the production refinement.
 
 ---
 

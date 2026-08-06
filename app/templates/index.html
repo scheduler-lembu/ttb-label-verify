@@ -1,14 +1,3 @@
-<!--
-  index.html — the ONE page (scaffold markup only; no working logic).
-
-  Single responsibility: present a dead-simple UI operable by a non-technical,
-  first-time user with no training (NFR-03; the "73-year-old / no hunting for
-  buttons" benchmark): one big upload zone, one primary button, one results
-  table area. Batch results are appended row-by-row via SSE (see static/app.js).
-
-  This is a static placeholder. No Jinja variables are wired and no logic runs
-  in this pass.
--->
 <!doctype html>
 <html lang="en">
 <head>
@@ -19,34 +8,76 @@
 </head>
 <body>
   <main class="page">
-    <h1>Label Verification</h1>
-    <p class="tagline">Upload a label image and its expected details. We check each field.</p>
+    <header class="head">
+      <h1>TTB label verification</h1>
+      <p class="tagline">Upload a label, enter what it should say, and check them against each other.</p>
+    </header>
 
-    <!-- Single big, obvious upload zone -->
-    <section class="upload-zone" aria-label="Upload a label">
-      <p class="upload-hint">Drop a label image here, or click to choose a file.</p>
-      <input type="file" id="label-file" accept="image/*" />
-    </section>
+    <form class="verify-form" method="post" action="/verify" enctype="multipart/form-data" id="verify-form">
+      <div class="grid">
+        <section class="upload-zone" id="upload-zone">
+          <label for="label-file" class="upload-label">
+            <span class="upload-title">Drop a label image here, or click to choose</span>
+            <span class="file-name" id="file-name"></span>
+          </label>
+          <input type="file" id="label-file" name="label_image" accept="image/*" class="file-input" required />
+          <img id="thumb" class="thumb" alt="" hidden />
+        </section>
 
-    <!-- One primary action -->
-    <button type="button" id="verify-button" class="primary-button" disabled>
-      Verify Label
-    </button>
+        <section class="fields">
+          <p class="fields-title">What the label should say</p>
+          {% for f in form_fields %}
+          <div class="field">
+            <label for="f_{{ f.key }}">
+              {{ f.label }}{% if not f.required %} <span class="muted">— imports only</span>{% endif %}
+            </label>
+            <input type="text" id="f_{{ f.key }}" name="{{ f.key }}"
+                   value="{{ values.get(f.key, '') }}"
+                   placeholder="{{ placeholders.get(f.key, '') }}" />
+          </div>
+          {% endfor %}
+        </section>
+      </div>
 
-    <!-- Results table area (populated later; batch rows stream in via SSE) -->
-    <section class="results" aria-label="Results" hidden>
+      <p class="warning-note">
+        The Government Warning has no box — the app checks the label against the official regulation text automatically.
+      </p>
+
+      <button type="submit" id="verify-button" class="primary-button">Verify label</button>
+    </form>
+
+    {% if error %}
+    <div class="error-banner" role="alert">{{ error }}</div>
+    {% endif %}
+
+    {% if rows %}
+    <section class="results" aria-label="Results">
+      <div class="overall overall-{{ overall_state }}">{{ overall_message }}</div>
       <table id="results-table">
         <thead>
           <tr>
             <th>Field</th>
+            <th>On the label</th>
             <th>Expected</th>
-            <th>Found on label</th>
             <th>Result</th>
           </tr>
         </thead>
-        <tbody><!-- rows appended by app.js --></tbody>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td class="cell-field">{{ row.label }}</td>
+            <td class="cell-val">{{ row.extracted }}</td>
+            <td class="cell-val">{{ row.expected }}</td>
+            <td class="cell-result">
+              <span class="badge badge-{{ row.verdict }}">{{ row.verdict_label }}</span>
+              {% if row.reason %}<div class="reason">{{ row.reason }}</div>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
       </table>
     </section>
+    {% endif %}
   </main>
 
   <script src="/static/app.js"></script>

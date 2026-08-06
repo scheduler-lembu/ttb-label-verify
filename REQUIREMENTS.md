@@ -129,6 +129,13 @@ call to keep real photos within the budget and reduce cost.
 std-dev blank check) routes unreadable uploads to NEEDS_REVIEW ("request a better
 image") before an API call is made, saving cost and matching current agent practice.
 
+**Note on NFR-03 / NFR-06:** The single-page UI (one upload zone, one
+expected-values form, one primary button, a color-coded extracted-vs-expected
+results table with an overall banner) is server-rendered and operable with no
+training (NFR-03); a missing or malformed upload produces a clear message rather
+than an error or crash (NFR-06). The Government Warning is verified against the
+stored regulation text and therefore has no input field.
+
 ---
 
 ## 7. Constraints (C)
