@@ -165,3 +165,52 @@ body {
   text-align: left; padding: 0.8rem 0.7rem; border-bottom: 1px solid var(--border); vertical-align: top;
 }
 .detail-table th { font-size: 0.85rem; color: var(--muted); font-weight: 700; }
+
+/* Triage actions (approve / reject / tool-was-wrong) + tallies + closure */
+.triage-reviewed { margin: -0.5rem 0 1rem; font-size: 1rem; font-weight: 700; color: var(--muted); }
+.undo-last {
+  margin: -0.25rem 0 1rem; padding: 0.45rem 0.9rem; font-size: 0.95rem; font-family: inherit;
+  font-weight: 700; cursor: pointer; color: var(--fg);
+  background: #fff; border: 1px solid var(--border); border-radius: 10px;
+}
+.undo-last:hover { background: var(--panel); }
+.triage-done {
+  padding: 1.5rem 1.25rem; font-size: 1.3rem; font-weight: 700;
+  color: var(--pass-fg); background: var(--pass-bg); border-radius: 12px;
+}
+
+.row-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; flex: none; }
+.act {
+  padding: 0.55rem 1rem; font-size: 1rem; font-weight: 700; font-family: inherit;
+  border: 1px solid transparent; border-radius: 10px; cursor: pointer; white-space: nowrap;
+}
+.act-approve { color: #fff; background: var(--pass-fg); }
+.act-approve:hover { background: #0e5624; }
+.act-reject { color: #fff; background: var(--fail-fg); }
+.act-reject:hover { background: #85121a; }
+.act-toolerr { color: var(--review-fg); background: var(--review-bg); border-color: #e6d08a; }
+.act-toolerr:hover { background: #f6e6b8; }
+
+/* Folder row becomes: clickable open area + the action buttons */
+.folder-row {
+  display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+  gap: 1rem; width: 100%; padding: 0.85rem 1.25rem; border-top: 1px solid var(--border); background: #fff;
+}
+@media (max-width: 560px) { .folder-row { flex-direction: column; align-items: stretch; } }
+.folder-row:hover { background: #f7faff; }
+.folder-row-open {
+  display: flex; flex-direction: column; gap: 0.15rem; align-items: flex-start;
+  flex: 1 1 auto; text-align: left; font-family: inherit; cursor: pointer;
+  background: none; border: none; padding: 0; color: var(--fg);
+}
+
+.folder-card.cleared .folder-count { color: var(--pass-fg); background: var(--pass-bg); }
+
+.detail-decision { margin-top: 1.5rem; padding-top: 1.25rem; border-top: 2px solid var(--border); }
+.decision-prompt { margin: 0 0 0.6rem; font-weight: 700; }
+.detail-decision .row-actions { margin-bottom: 0.75rem; }
+.note-input {
+  width: 100%; max-width: 480px; padding: 0.6rem 0.7rem; font-size: 1rem; font-family: inherit;
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.note-input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }

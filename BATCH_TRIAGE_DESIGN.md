@@ -1,9 +1,12 @@
 # Batch Triage & Data-Source — Design Direction (Documented Target)
 ## TTB AI Label Verification Prototype — Working Document
 
-> **STATUS: IN BUILD — Phase 3 (exception-folder triage) started.** Read-only folder view first
-> (batch sorts into folders by reason code, clean items auto-clear, click a label for the full
-> per-field detail); approve/reject/note click-through is the next pass.
+> **STATUS: IN BUILD — Phase 3 (exception-folder triage) functionally complete, pending deploy.**
+> Batch sorts into folders by reason code and clean items auto-clear; clicking a label opens the full
+> per-field detail. The approve / reject / "tool was wrong" click-through is now BUILT, with the row
+> clearing on-screen the instant the agent acts (label-level disposition — one label with one decision
+> clears from every folder it appears in), running tallies, and an "all caught up" closing state.
+> Disposition is session-only, held in memory with no persistence (D-8 / CON-02). Next: deploy.
 
 ---
 

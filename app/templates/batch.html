@@ -39,6 +39,11 @@
 
     <section class="results" id="batch-results" hidden>
       <div class="triage-summary" id="triage-summary">Starting&hellip;</div>
+      <div class="triage-reviewed" id="triage-reviewed" hidden></div>
+      <button type="button" class="undo-last" id="undo-last" hidden>&#8630; Undo last</button>
+
+      <!-- Completion state: shown when every folder is empty. -->
+      <div class="triage-done" id="triage-done" hidden></div>
 
       <!-- Folders: one card per problem type; only non-empty folders render. -->
       <div class="folders" id="folders"></div>
@@ -53,6 +58,16 @@
           </thead>
           <tbody id="detail-tbody"></tbody>
         </table>
+        <div class="detail-decision">
+          <p class="decision-prompt">Your decision for this label:</p>
+          <div class="row-actions">
+            <button type="button" class="act act-approve" id="detail-approved">Approve</button>
+            <button type="button" class="act act-reject" id="detail-rejected">Reject</button>
+            <button type="button" class="act act-toolerr" id="detail-tool_error">Tool was wrong</button>
+          </div>
+          <input type="text" class="note-input" id="detail-note"
+                 placeholder="Optional note (if the tool was wrong)" />
+        </div>
       </section>
     </section>
   </main>

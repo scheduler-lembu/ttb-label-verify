@@ -6,11 +6,22 @@
   var errorBox = document.getElementById("batch-error");
   var resultsSec = document.getElementById("batch-results");
   var summaryEl = document.getElementById("triage-summary");
+  var reviewedEl = document.getElementById("triage-reviewed");
+  var doneEl = document.getElementById("triage-done");
+  var undoBtn = document.getElementById("undo-last");
   var foldersEl = document.getElementById("folders");
   var detailPanel = document.getElementById("detail-panel");
   var detailTitle = document.getElementById("detail-title");
   var detailTbody = document.getElementById("detail-tbody");
   var detailBack = document.getElementById("detail-back");
+  var noteInput = document.getElementById("detail-note");
+
+  // disposition -> human label for the reviewed tally
+  var DISPOSITIONS = [
+    { key: "approved", label: "Approve", cls: "act-approve" },
+    { key: "rejected", label: "Reject", cls: "act-reject" },
+    { key: "tool_error", label: "Tool was wrong", cls: "act-toolerr" },
+  ];
 
   var state;
 
@@ -22,7 +33,16 @@
     foldersEl.innerHTML = "";
     detailPanel.hidden = true;
     foldersEl.hidden = false;
-    state = { total: 0, done: 0, cleared: 0, attention: 0, folders: {}, order: [] };
+    doneEl.hidden = true;
+    reviewedEl.hidden = true;
+    undoBtn.hidden = true;
+    if (noteInput) noteInput.value = "";
+    state = {
+      total: 0, done: 0, cleared: 0, attention: 0, flaggedTotal: 0, seq: 0,
+      folders: {}, order: [], items: {},
+      reviewed: { approved: 0, rejected: 0, tool_error: 0 },
+      lastAction: null, detailContext: null,
+    };
     resultsSec.hidden = false;
     summaryEl.textContent = "Starting…";
   }
@@ -33,12 +53,52 @@
       + " cleared automatically   ▲ " + state.attention + " need your attention";
   }
 
-  // --- Detail panel: full per-field readout for one label (reuses the
-  //     single-label result shape: field | extracted | expected | verdict). ---
-  function openDetail(item) {
-    detailTitle.textContent = item.name;
+  function updateReviewed() {
+    var r = state.reviewed;
+    if (r.approved + r.rejected + r.tool_error > 0) {
+      reviewedEl.hidden = false;
+      reviewedEl.textContent = "Reviewed by you: " + r.approved + " approved · "
+        + r.rejected + " rejected · " + r.tool_error + " tool errors";
+    } else {
+      reviewedEl.hidden = true;
+    }
+  }
+
+  function checkCompletion() {
+    if (state.flaggedTotal > 0 && state.attention === 0) {
+      detailPanel.hidden = true;
+      foldersEl.hidden = true;
+      var r = state.reviewed;
+      doneEl.hidden = false;
+      doneEl.textContent = "All caught up — you reviewed "
+        + (r.approved + r.rejected + r.tool_error) + " label(s): "
+        + r.approved + " approved · " + r.rejected + " rejected · " + r.tool_error + " tool errors.";
+    }
+  }
+
+  // --- Action buttons (shared by folder rows and the detail panel) ---
+  function makeActionButtons(handler) {
+    var wrap = document.createElement("div");
+    wrap.className = "row-actions";
+    DISPOSITIONS.forEach(function (d) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "act " + d.cls;
+      b.textContent = d.label;
+      b.addEventListener("click", function (ev) { ev.stopPropagation(); handler(d.key); });
+      wrap.appendChild(b);
+    });
+    return wrap;
+  }
+
+  // --- Detail panel: full per-field readout + the three actions. ---
+  function openDetail(id, folderId) {
+    var entry = state.items[id];
+    if (!entry) return;
+    state.detailContext = { id: id, folderId: folderId };
+    detailTitle.textContent = entry.item.name;
     detailTbody.innerHTML = "";
-    (item.fields || []).forEach(function (row) {
+    (entry.item.fields || []).forEach(function (row) {
       var tr = document.createElement("tr");
       var f = document.createElement("td"); f.className = "cell-field"; f.textContent = row.label;
       var x = document.createElement("td"); x.className = "cell-val"; x.textContent = row.extracted;
@@ -56,16 +116,46 @@
       tr.appendChild(f); tr.appendChild(x); tr.appendChild(e); tr.appendChild(r);
       detailTbody.appendChild(tr);
     });
+    if (noteInput) noteInput.value = "";
     foldersEl.hidden = true;
+    doneEl.hidden = true;
     detailPanel.hidden = false;
   }
 
   function closeDetail() {
+    state.detailContext = null;
     detailPanel.hidden = true;
     foldersEl.hidden = false;
   }
 
+  // Acting in the detail panel resolves, then auto-advances to the next
+  // unresolved item in the SAME folder (or back to the folder list).
+  function detailAct(disposition) {
+    var ctx = state.detailContext;
+    if (!ctx) return;
+    var note = disposition === "tool_error" && noteInput ? (noteInput.value || "").trim() : null;
+    var folderId = ctx.folderId;
+    resolve(ctx.id, disposition, note);
+    var f = state.folders[folderId];
+    if (f && f.ids.length > 0) {
+      openDetail(f.ids[0], folderId);
+    } else {
+      closeDetail();
+      checkCompletion();
+    }
+  }
+
   // --- Folders ---
+  function setFolderCount(f) {
+    if (f.ids.length === 0) {
+      f.card.classList.add("cleared");
+      f.countEl.textContent = "✓ All clear";
+    } else {
+      f.card.classList.remove("cleared");
+      f.countEl.textContent = String(f.ids.length);
+    }
+  }
+
   function ensureFolder(tag) {
     var f = state.folders[tag.folder_id];
     if (f) return f;
@@ -94,34 +184,90 @@
     card.appendChild(head); card.appendChild(list);
     foldersEl.appendChild(card);
 
-    f = { label: tag.folder_label, items: [], countEl: count, listEl: list };
+    f = { id: tag.folder_id, label: tag.folder_label, ids: [], countEl: count, listEl: list, card: card };
     state.folders[tag.folder_id] = f;
     state.order.push(tag.folder_id);
     return f;
   }
 
-  function addToFolder(tag, item) {
-    var f = ensureFolder(tag);
-    f.items.push(item);
-    f.countEl.textContent = String(f.items.length);
-
-    var row = document.createElement("button");
-    row.type = "button";
+  function makeRow(id, tag) {
+    var entry = state.items[id];
+    var row = document.createElement("div");
     row.className = "folder-row";
 
+    var open = document.createElement("button");
+    open.type = "button";
+    open.className = "folder-row-open";
     var label = document.createElement("span");
-    label.className = "folder-row-name"; label.textContent = item.name;
-
+    label.className = "folder-row-name"; label.textContent = entry.item.name;
     var flaw = document.createElement("span");
     flaw.className = "folder-row-flaw";
     var bits = [];
     if (tag.note) bits.push(tag.note);
     if (tag.extracted) bits.push("on label: " + tag.extracted);
     flaw.textContent = bits.join("  ·  ");
+    open.appendChild(label); open.appendChild(flaw);
+    open.addEventListener("click", function () { openDetail(id, tag.folder_id); });
 
-    row.appendChild(label); row.appendChild(flaw);
-    row.addEventListener("click", function () { openDetail(item); });
+    // Fast rip-through: acting on a folder row resolves + clears (no advance).
+    var actions = makeActionButtons(function (disposition) { resolve(id, disposition, null); });
+
+    row.appendChild(open); row.appendChild(actions);
+    return row;
+  }
+
+  function addToFolder(tag, id) {
+    var f = ensureFolder(tag);
+    f.ids.push(id);
+    var row = makeRow(id, tag);
+    state.items[id].rowEls[tag.folder_id] = row;
     f.listEl.appendChild(row);
+    setFolderCount(f);
+  }
+
+  // --- Resolution (label-level, session-only, in memory) ---
+  function resolve(id, disposition, note) {
+    var entry = state.items[id];
+    if (!entry || entry.disposition) return;   // already resolved
+    entry.disposition = disposition;
+    entry.note = note || "";
+    state.reviewed[disposition] += 1;
+    state.attention -= 1;
+
+    // Remove this label from EVERY folder it was tagged in (one label, one disposition).
+    Object.keys(entry.rowEls).forEach(function (fid) {
+      var f = state.folders[fid];
+      var idx = f.ids.indexOf(id);
+      if (idx !== -1) f.ids.splice(idx, 1);
+      var el = entry.rowEls[fid];
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+      setFolderCount(f);
+    });
+    entry.rowEls = {};
+
+    state.lastAction = { id: id, disposition: disposition };
+    undoBtn.hidden = false;
+    updateSummary(state.total > 0 && state.done >= state.total);
+    updateReviewed();
+    checkCompletion();
+  }
+
+  function undoLast() {
+    var la = state.lastAction;
+    if (!la) return;
+    var entry = state.items[la.id];
+    if (!entry || !entry.disposition) return;
+    state.reviewed[entry.disposition] -= 1;
+    entry.disposition = null;
+    entry.note = "";
+    state.attention += 1;
+    entry.tags.forEach(function (tag) { addToFolder(tag, la.id); });
+    state.lastAction = null;
+    undoBtn.hidden = true;
+    doneEl.hidden = true;
+    foldersEl.hidden = false;
+    updateSummary(state.total > 0 && state.done >= state.total);
+    updateReviewed();
   }
 
   function handleItem(item) {
@@ -132,16 +278,23 @@
       return;
     }
     state.attention += 1;
-    (item.folder_tags || []).forEach(function (tag) { addToFolder(tag, item); });
+    state.flaggedTotal += 1;
+    var id = "L" + (++state.seq);
+    state.items[id] = {
+      item: item, disposition: null, note: "",
+      tags: item.folder_tags || [], rowEls: {},
+    };
+    (item.folder_tags || []).forEach(function (tag) { addToFolder(tag, id); });
+    doneEl.hidden = true;          // more work arrived; not caught up
     updateSummary(false);
   }
 
   function finalSummary(s) {
     state.cleared = s.pass;
-    state.attention = s.fail + s.needs_review;
     state.total = s.total;
     state.done = s.total;
-    updateSummary(true);
+    updateSummary(true);           // attention stays the live unresolved count
+    checkCompletion();
   }
 
   function startStream(jobId, itemCount) {
@@ -168,6 +321,12 @@
   }
 
   if (detailBack) detailBack.addEventListener("click", closeDetail);
+  if (undoBtn) undoBtn.addEventListener("click", undoLast);
+  // Detail-panel action buttons (approve / reject / tool-was-wrong).
+  DISPOSITIONS.forEach(function (d) {
+    var btn = document.getElementById("detail-" + d.key);
+    if (btn) btn.addEventListener("click", function () { detailAct(d.key); });
+  });
 
   if (demoBtn) {
     demoBtn.addEventListener("click", function () {
