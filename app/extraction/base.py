@@ -6,7 +6,10 @@ exposes a single operation — transcribe an image into structured fields — pl
 an ``ok`` flag the router/verify layer uses to decide accept vs. NEEDS_REVIEW.
 
 Judgment lives elsewhere: an extractor ONLY reads. It never compares against
-expected values and never decides PASS/FAIL.
+expected values and never decides PASS/FAIL. This is the interface-level
+enforcement of "AI reads, code judges" (GA-1) — by giving every provider a
+transcribe-only contract, the AI can never become the decider no matter which
+engine config selects (D-1).
 """
 
 from __future__ import annotations

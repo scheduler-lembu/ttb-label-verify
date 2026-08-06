@@ -76,7 +76,17 @@ def build_demo_items(settings=None):
 
 
 def build_uploaded_items(csv_bytes: bytes, images: "dict[str, bytes]"):
-    """Pair rows from an uploaded CSV to uploaded images by image_filename."""
+    """Pair rows from an uploaded CSV to uploaded images by image_filename.
+
+    Pairing is case-insensitive on the filename (case-fold only) and compares
+    basenames, so a CSV ``Label1.PNG`` or ``folder/label1.png`` still pairs with
+    an uploaded ``label1.png`` — a real tester's export path/casing shouldn't
+    cause a silent mis-pair (#10/#11). It deliberately does NOT guess extensions:
+    ``label1`` still does not match ``label1.png`` (extension-guessing would
+    create silent mis-pairs). If two uploaded images differ only by case (their
+    casefolded basenames collide), the pairing is ambiguous and any row naming it
+    is skipped with a clear error rather than guessing which file was meant.
+    """
     try:
         text = csv_bytes.decode("utf-8-sig")
     except Exception:
@@ -86,6 +96,17 @@ def build_uploaded_items(csv_bytes: bytes, images: "dict[str, bytes]"):
     if "image_filename" not in headers:
         raise ValueError("The CSV needs an 'image_filename' column (see the template).")
 
+    # Casefolded-basename lookup of the uploaded images. A key that two distinct
+    # uploads collide on is recorded as ambiguous (we refuse to guess for it).
+    lookup: "dict[str, str]" = {}
+    ambiguous: set = set()
+    for orig in images:
+        key = os.path.basename(orig).casefold()
+        if key in lookup:
+            ambiguous.add(key)
+        else:
+            lookup[key] = orig
+
     items: list[BatchItem] = []
     errors: list[PairingError] = []
     referenced = set()
@@ -94,17 +115,23 @@ def build_uploaded_items(csv_bytes: bytes, images: "dict[str, bytes]"):
         if not fn:
             errors.append(PairingError("(row)", "blank image_filename"))
             continue
-        referenced.add(fn)
-        if fn not in images:
+        key = os.path.basename(fn).casefold()
+        referenced.add(key)
+        if key in ambiguous:
+            errors.append(PairingError(fn, "ambiguous image filename — two uploaded files differ only by case"))
+            continue
+        if key not in lookup:
             errors.append(PairingError(fn, "no matching image was uploaded"))
             continue
         expected = {k: (row.get(k) or "").strip() for k in _EXPECTED_KEYS}
-        name = expected.get("brand") or fn
-        items.append(BatchItem(name=name, image_filename=fn, expected=expected, image_bytes=images[fn]))
+        stored_name = os.path.basename(fn)  # path-free so the image/re-ingest URLs resolve
+        name = expected.get("brand") or stored_name
+        items.append(BatchItem(name=name, image_filename=stored_name,
+                               expected=expected, image_bytes=images[lookup[key]]))
 
-    for fn in images:
-        if fn not in referenced:
-            errors.append(PairingError(fn, "image uploaded but no CSV row uses it"))
+    for orig in images:
+        if os.path.basename(orig).casefold() not in referenced:
+            errors.append(PairingError(orig, "image uploaded but no CSV row uses it"))
     return items, errors
 
 

@@ -23,6 +23,7 @@ def _png_bytes(arr: np.ndarray) -> bytes:
 
 def test_sharp_noise_ok():
     """A high-variance random-noise image passes the gate."""
+    # guards D-15: a legibly sharp image clears the quality gate so extraction can proceed.
     arr = np.random.randint(0, 255, (200, 200), dtype=np.uint8)
     result = check_quality(
         _png_bytes(arr), blur_threshold=BLUR_THRESHOLD, blank_stddev=BLANK_STDDEV
@@ -33,6 +34,7 @@ def test_sharp_noise_ok():
 
 def test_blank_image_flagged():
     """A solid mid-gray image is flagged as blank."""
+    # guards D-15/FR-09: a blank image is caught pre-API (reason "blank") -> NEEDS_REVIEW downstream.
     arr = np.full((200, 200), 127, dtype=np.uint8)
     result = check_quality(
         _png_bytes(arr), blur_threshold=BLUR_THRESHOLD, blank_stddev=BLANK_STDDEV
@@ -43,6 +45,7 @@ def test_blank_image_flagged():
 
 def test_blurry_image_flagged():
     """A smooth horizontal gradient has few edges → flagged as blurry."""
+    # guards D-15/NFR-05: a low-edge (blurry) image is caught pre-API (reason "blurry").
     arr = np.tile(np.linspace(0, 255, 200).astype(np.uint8), (200, 1))
     result = check_quality(
         _png_bytes(arr), blur_threshold=BLUR_THRESHOLD, blank_stddev=BLANK_STDDEV
@@ -53,6 +56,7 @@ def test_blurry_image_flagged():
 
 def test_undecodable_bytes():
     """Bytes that are not an image → undecodable, never a crash."""
+    # guards NFR-06: non-image bytes return reason "undecodable" instead of raising.
     result = check_quality(
         b"not an image", blur_threshold=BLUR_THRESHOLD, blank_stddev=BLANK_STDDEV
     )

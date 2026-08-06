@@ -1,18 +1,33 @@
-# Fly.io deployment placeholder for the TTB label verification prototype.
+# Fly.io deployment config for the TTB label verification prototype.
 #
-# Minimal placeholder only — real app name, region, and secrets are filled in at
-# deploy time (a LATER phase). Not deployed in this pass. The same container
-# image also targets TTB's Azure tenant for production (see ARCHITECTURE.md).
+# NOT deployed in this pass — this file is prepared and validated locally only.
+# The app name below may need to be changed at launch (Fly requires a globally
+# unique name); the user picks the final name. The same container image also
+# targets TTB's Azure tenant for production (see ARCHITECTURE.md).
+#
+# The API key is provided at deploy time as a Fly secret
+# (`fly secrets set API_KEY=...`) — never committed here or baked into the image.
 
-app = "ttb-label-verify"        # placeholder; set the real app name at deploy time
-primary_region = ""             # placeholder; choose at deploy time
+app = "ttb-label-verify"        # may need a different globally-unique name at launch
+primary_region = "iad"          # US East (Ashburn); change to a region near users
 
 [build]
   dockerfile = "Dockerfile"
 
 [http_service]
-  internal_port = 8080
+  internal_port = 8000
   force_https = true
   auto_stop_machines = true
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 0      # scale to zero when idle -> near-zero cost
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "get"
+    path = "/health"
+    timeout = "5s"
+
+[[vm]]
+  memory = "1024mb"             # headroom for the retained in-memory jobs
+  cpus = 1                      # shared

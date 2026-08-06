@@ -19,6 +19,7 @@ def _png_bytes(width: int, height: int) -> bytes:
 
 def test_small_image_passthrough():
     """An image within the cap is returned unchanged, with a PNG mime."""
+    # Under-cap images are not re-encoded (avoids needless quality loss before the vision call).
     original = _png_bytes(100, 100)
     out_bytes, mime = _prepare_image(original, 1536)
     assert out_bytes == original  # same content, no re-encode
@@ -28,6 +29,7 @@ def test_small_image_passthrough():
 
 def test_large_image_downscaled():
     """An oversized image is downscaled so its longest side == the cap (JPEG)."""
+    # Supports NFR-01 latency / token cost: cap the longest side, preserve aspect ratio.
     original = _png_bytes(3000, 2000)
     out_bytes, mime = _prepare_image(original, 1536)
     assert mime == "image/jpeg"
@@ -38,6 +40,7 @@ def test_large_image_downscaled():
 
 def test_prepare_image_failsafe():
     """Undecodable bytes return a 2-tuple without raising; original passes through."""
+    # guards NFR-06: prep is fail-safe — bad bytes pass through untouched instead of crashing the request.
     junk = b"not an image"
     out = _prepare_image(junk, 1536)
     assert isinstance(out, tuple) and len(out) == 2

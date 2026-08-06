@@ -34,6 +34,7 @@ def test_get_known_application():
 
 
 def test_expected_keys_are_registry_only():
+    # Every expected-field key maps to a known field-registry key; non-field CSV columns (beverage_type) stay out of `expected`.
     for app in DemoCsvSource(CSV_PATH).list_applications():
         for key in app.expected:
             assert key in _REGISTRY_KEYS
@@ -41,9 +42,11 @@ def test_expected_keys_are_registry_only():
 
 
 def test_extra_field_preserved():
+    # Non-field columns are still retained on `.extra` (beverage_type) rather than discarded.
     apps = DemoCsvSource(CSV_PATH).list_applications()
     assert any(a.extra.get("beverage_type") for a in apps)
 
 
 def test_unknown_id_returns_none():
+    # An unknown application id returns None rather than raising.
     assert DemoCsvSource(CSV_PATH).get_application("APP-9999") is None

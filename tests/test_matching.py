@@ -36,6 +36,7 @@ def test_brand_ampersand_equals_and():
 
 
 def test_brand_hyphen_and_spacing_ignored():
+    # MR-01: hyphen vs space and collapsed double-spacing don't block a brand match.
     assert match_brand("Old-Tom Distillery", "Old Tom  Distillery").verdict == ResultState.PASS
 
 
@@ -70,7 +71,8 @@ def test_brand_special_character_needs_review():
 def test_brand_near_miss_is_needs_review():
     """A close-but-not-exact brand lands in the review band, not an auto-pass/fail."""
     r = match_brand("Old Tom Distillery", "Old Tom Distillary Co")
-    assert r.verdict in (ResultState.NEEDS_REVIEW, ResultState.PASS)
+    assert r.verdict == ResultState.NEEDS_REVIEW
+    assert r.reason == ResultReason.BORDERLINE
 
 
 # --------------------------------------------------------------------------- #
@@ -111,11 +113,13 @@ def test_abv_both_absent_needs_review():
 
 
 def test_abv_expected_present_extracted_empty_needs_review():
+    # Expected an ABV but the label read nothing -> NEEDS_REVIEW, never an auto-FAIL.
     r = match_abv("45%", "")
     assert r.verdict == ResultState.NEEDS_REVIEW
 
 
 def test_abv_value_on_label_but_none_expected_needs_review():
+    # An ABV appears on the label but none was expected -> NEEDS_REVIEW (unexpected value, human confirms).
     r = match_abv(None, "45% Alc./Vol.")
     assert r.verdict == ResultState.NEEDS_REVIEW
 
@@ -124,6 +128,7 @@ def test_abv_value_on_label_but_none_expected_needs_review():
 # Government Warning (MR-04/05)
 # --------------------------------------------------------------------------- #
 def test_warning_exact_canonical_passes():
+    # MR-04: the exact canonical warning text -> PASS / match.
     r = match_warning(None, CANONICAL_GOVERNMENT_WARNING)
     assert r.verdict == ResultState.PASS
     assert r.reason == ResultReason.MATCH
@@ -157,6 +162,7 @@ def test_warning_extra_whitespace_still_passes():
 
 
 def test_warning_prefix_missing_fails():
+    # MR-05: warning body present but the "GOVERNMENT WARNING:" prefix is absent -> FAIL / warning_prefix_missing.
     r = match_warning(None, "According to the Surgeon General, women should not...")
     assert r.verdict == ResultState.FAIL
     assert r.reason == ResultReason.WARNING_PREFIX_MISSING
@@ -164,6 +170,7 @@ def test_warning_prefix_missing_fails():
 
 
 def test_warning_empty_needs_review():
+    # FR-09: a blank/None warning read -> NEEDS_REVIEW / unreadable, not a guessed FAIL.
     r = match_warning(None, "")
     assert r.verdict == ResultState.NEEDS_REVIEW
     assert r.reason == ResultReason.UNREADABLE
@@ -226,16 +233,19 @@ def test_supporting_required_blank_needs_review():
 
 
 def test_supporting_expected_present_extracted_empty_needs_review():
+    # FR-08/FR-09: expected a supporting value but read nothing -> NEEDS_REVIEW, not FAIL.
     r = match_supporting("class_type", "Kentucky Straight Bourbon Whiskey", "")
     assert r.verdict == ResultState.NEEDS_REVIEW
 
 
 def test_supporting_clear_mismatch_fails():
+    # FR-08: a clearly different supporting value (Bourbon vs Vodka) -> FAIL.
     r = match_supporting("class_type", "Kentucky Straight Bourbon Whiskey", "Vodka")
     assert r.verdict == ResultState.FAIL
 
 
 def test_supporting_normalized_producer_match():
+    # FR-08: case + punctuation differences in the producer line normalize to a PASS.
     r = match_supporting(
         "producer",
         "Old Tom Distillery, Louisville, KY",
@@ -248,17 +258,20 @@ def test_supporting_normalized_producer_match():
 # Normalizers (direct)
 # --------------------------------------------------------------------------- #
 def test_normalize_general_none_and_punctuation():
+    # Backs MR-01: general normalizer lowercases, strips punctuation, expands '&' -> 'and', maps None -> "".
     assert normalize_general(None) == ""
     assert normalize_general("Stone's Throw!!") == "stone s throw"
     assert normalize_general("A & B") == "a and b"
 
 
 def test_normalize_whitespace_only_preserves_case_and_punct():
+    # Backs MR-04/D-13: whitespace-only normalizer collapses spaces/newlines but keeps case and punctuation (needed for the strict warning compare).
     assert normalize_whitespace_only("  A,  B \n C  ") == "A, B C"
     assert normalize_whitespace_only(None) == ""
 
 
 def test_normalize_measure_units():
+    # Backs FR-08 net_contents: measure normalizer folds case/spacing and "Liter" -> "l".
     assert normalize_measure("750 mL") == "750ml"
     assert normalize_measure("1 Liter") == "1l"
     assert normalize_measure(None) == ""
@@ -292,12 +305,14 @@ def _compliant_extracted():
 
 
 def test_run_matchers_all_pass_overall_pass():
+    # FR-02/FR-03: a fully compliant label rolls up to overall PASS across all 7 fields.
     result = run_matchers(_compliant_expected(), _compliant_extracted())
     assert result.overall == ResultState.PASS
     assert len(result.fields) == 7
 
 
 def test_run_matchers_any_fail_overall_fail():
+    # Rollup precedence: any single field FAIL makes the overall verdict FAIL.
     expected = _compliant_expected()
     extracted = _compliant_extracted()
     extracted["alcohol_content"] = "40%"  # mismatch -> FAIL
@@ -306,6 +321,7 @@ def test_run_matchers_any_fail_overall_fail():
 
 
 def test_run_matchers_needs_review_when_no_fail_but_unread():
+    # Rollup precedence: with no FAIL but an unread field, overall is NEEDS_REVIEW (not PASS).
     expected = _compliant_expected()
     extracted = _compliant_extracted()
     extracted["brand"] = ""  # unread -> NEEDS_REVIEW, no FAIL anywhere

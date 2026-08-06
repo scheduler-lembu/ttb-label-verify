@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TTB Label Verification</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/static/style.css?v=16" />
+  <link rel="stylesheet" href="/static/style.css?v=17" />
 </head>
 <body>
   <svg class="svg-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -31,6 +31,9 @@
       <p class="tagline">Upload a label, enter what it should say, and check them against each other.</p>
     </header>
 
+    <!-- Server-rendered verify form: posts to /verify and works with JS off (D-21);
+         app.js only progressively enhances it (drag/drop, thumbnail, submit state).
+         One obvious primary action — a single "Verify label" button (NFR-03). -->
     <form class="verify-form" method="post" action="/verify" enctype="multipart/form-data" id="verify-form">
       <div class="grid">
         <section class="upload-zone" id="upload-zone">
@@ -42,6 +45,9 @@
           <img id="thumb" class="thumb" alt="" hidden />
         </section>
 
+        <!-- Expected-value inputs for the typed fields only. The Government Warning
+             is intentionally absent — it's verified against stored canonical
+             regulation text, not agent input (see .warning-note below). -->
         <section class="fields">
           <p class="fields-title">What the label should say</p>
           {% for f in form_fields %}
@@ -69,6 +75,9 @@
     {% endif %}
 
     {% if rows %}
+    <!-- Co-located adjudication view (FR-04): each row shows the extracted value
+         beside the expected value, with a per-field PASS/FAIL/NEEDS_REVIEW verdict
+         (FR-03; an unreadable field surfaces as NEEDS_REVIEW, FR-09). -->
     <section class="results" aria-label="Results">
       <div class="overall overall-{{ overall_state }}">
         <svg class="icon"><use href="#i-{{ 'check' if overall_state == 'PASS' else ('x' if overall_state == 'FAIL' else 'warn') }}"/></svg>
@@ -104,6 +113,6 @@
     {% endif %}
   </main>
 
-  <script src="/static/app.js?v=16"></script>
+  <script src="/static/app.js?v=17"></script>
 </body>
 </html>

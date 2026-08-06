@@ -164,7 +164,7 @@ stored regulation text and therefore has no input field.
 | ASM-02 | The deployed prototype may use a **cloud** AI/OCR service. TTB's production network blocks some outbound ML endpoints, so a **local/offline extraction path** is documented as the production-compatible alternative. This local-vs-cloud trade-off is written up. | R23 |
 | ASM-03 | The **canonical Government Warning** is the fixed TTB statutory wording, stored as the reference string. | R7, R11 |
 | ASM-04 | **Test labels** (including deliberately non-compliant ones) will be generated/sourced, AI image generation permitted. | R26 |
-| ASM-05 | Prototype targets **English-language** labels. *(Confirm — flagged for review.)* | scoping |
+| ASM-05 | Prototype targets **English-language** labels. *(Confirmed — implemented; non-ASCII/accented values route to a special_character review, MA-5.)* | scoping |
 
 ---
 

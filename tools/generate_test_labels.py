@@ -351,6 +351,8 @@ def degrade(img: Image.Image) -> Image.Image:
 
 
 def main() -> None:
+    """Render every catalog PNG (degrading where flagged) and write the companion app-data CSV
+    from the same LABELS list, so the images and expected values can never drift apart."""
     os.makedirs(TEST_LABELS_DIR, exist_ok=True)
     os.makedirs(os.path.dirname(CSV_PATH), exist_ok=True)
 

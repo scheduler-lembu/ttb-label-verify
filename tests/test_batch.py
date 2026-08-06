@@ -28,6 +28,8 @@ def test_build_demo_items_pairs_all():
 
 
 def test_build_uploaded_items_pairs_and_flags():
+    # guards FR-10: CSV rows pair to uploaded images; a CSV row with no image (l2) and an
+    # image with no CSV row (l3) are both surfaced as errors, not silently dropped.
     csv_text = "image_filename,brand,alcohol_content\nl1.png,BRAND ONE,45%\nl2.png,BRAND TWO,40%\n"
     images = {"l1.png": b"img1", "l3.png": b"orphan"}
     items, errors = build_uploaded_items(csv_text.encode("utf-8"), images)
@@ -39,24 +41,28 @@ def test_build_uploaded_items_pairs_and_flags():
 
 
 def test_build_uploaded_items_requires_filename_column():
+    # guards NFR-06: a CSV missing the image_filename column raises a clear ValueError, not a crash.
     import pytest
     with pytest.raises(ValueError):
         build_uploaded_items(b"brand,alcohol_content\nX,45%\n", {})
 
 
 def test_batch_page_ok():
+    # guards FR-10: the batch page renders and offers the one-click demo run.
     r = client.get("/batch")
     assert r.status_code == 200
     assert "Run the demo batch" in r.text
 
 
 def test_template_csv_download():
+    # guards FR-10: the downloadable upload template carries the required image_filename column.
     r = client.get("/template.csv")
     assert r.status_code == 200
     assert "image_filename" in r.text
 
 
 def test_post_batch_demo_creates_job():
+    # guards FR-10/FR-11: POST /batch in demo mode creates a job with one item per demo application.
     expected_n = len(build_demo_items()[0])
     r = client.post("/batch", data={"mode": "demo"})
     assert r.status_code == 200
@@ -66,6 +72,7 @@ def test_post_batch_demo_creates_job():
 
 
 def test_post_batch_upload_no_csv_errors():
+    # guards NFR-06: upload mode with no CSV returns 400 + a clear message, not a crash.
     r = client.post("/batch", data={"mode": "upload"})
     assert r.status_code == 400
     assert "CSV" in r.json()["error"]
@@ -157,6 +164,94 @@ def test_reverify_endpoint_offline(monkeypatch):
     # Unknown filename / unknown job -> 404, no crash.
     assert client.post("/batch/reverify-job/reverify/nope.png").status_code == 404
     assert client.post(f"/batch/no-such-job/reverify/{fn}").status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# Upload hardening (#26): case-insensitive pairing, size skip, truncation notice
+# --------------------------------------------------------------------------- #
+def test_pairing_is_case_insensitive():
+    # guards #10: CSV filename casing differs from the uploaded file -> still pairs
+    # (case-fold match), not a silent mis-pair.
+    csv_text = "image_filename,brand\nLabel1.PNG,BRAND ONE\n"
+    items, errors = build_uploaded_items(csv_text.encode("utf-8"), {"label1.png": b"img1"})
+    assert len(items) == 1
+    assert items[0].image_bytes == b"img1"
+    assert errors == []
+
+
+def test_pairing_ambiguous_case_is_rejected():
+    # guards #10: two uploads that differ ONLY by case -> the row is skipped with an
+    # explicit ambiguity error rather than the matcher guessing which file was meant.
+    csv_text = "image_filename,brand\nlabel1.png,BRAND ONE\n"
+    images = {"label1.png": b"lower", "LABEL1.PNG": b"upper"}
+    items, errors = build_uploaded_items(csv_text.encode("utf-8"), images)
+    assert items == []
+    assert any("ambiguous" in e.problem for e in errors)
+
+
+def test_pairing_csv_path_is_basenamed():
+    # guards #11: a CSV that carries a folder path pairs on the basename with a
+    # flat-uploaded image.
+    csv_text = "image_filename,brand\nfolder/label1.png,BRAND ONE\n"
+    items, errors = build_uploaded_items(csv_text.encode("utf-8"), {"label1.png": b"img1"})
+    assert len(items) == 1
+    assert items[0].image_filename == "label1.png"  # stored path-free so URLs resolve
+    assert errors == []
+
+
+def test_pairing_no_extension_still_unmatched():
+    # guards #11: extensions are NOT guessed -> 'label1' does not match 'label1.png';
+    # it surfaces as an unmatched-row error, never a silent (wrong) pair.
+    csv_text = "image_filename,brand\nlabel1,BRAND ONE\n"
+    items, errors = build_uploaded_items(csv_text.encode("utf-8"), {"label1.png": b"img1"})
+    assert items == []
+    assert any(e.reference == "label1" and "no matching image" in e.problem for e in errors)
+
+
+def test_oversized_image_skipped_with_error(monkeypatch):
+    # guards #15: an image over MAX_UPLOAD_MB is skipped (not processed) and surfaced
+    # as a "too large" notice, while a normal-sized image in the same batch still runs.
+    monkeypatch.setenv("MAX_UPLOAD_MB", "1")  # 1 MB cap for the test
+    small = b"\x89PNG\r\n\x1a\n" + b"s" * 100
+    big = b"\x89PNG\r\n\x1a\n" + b"b" * (1024 * 1024 + 10)  # just over 1 MB
+    csv_text = "image_filename,brand\nsmall.png,OK BRAND\nbig.png,TOO BIG\n"
+    r = client.post(
+        "/batch",
+        data={"mode": "upload"},
+        files=[
+            ("csv_file", ("in.csv", csv_text.encode("utf-8"), "text/csv")),
+            ("images", ("small.png", small, "image/png")),
+            ("images", ("big.png", big, "image/png")),
+        ],
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["item_count"] == 1  # only the small image became an item
+    problems = [e["problem"] for e in body["pairing_errors"]]
+    assert any("too large" in p for p in problems)
+
+
+def test_batch_truncation_notice(monkeypatch):
+    # guards #17: an upload over MAX_BATCH_ITEMS is truncated but the user is TOLD how
+    # many were dropped (a visible notice), not silently discarded.
+    monkeypatch.setenv("MAX_BATCH_ITEMS", "2")  # cap at 2 for the test
+    csv_text = ("image_filename,brand\n"
+                "a.png,A\nb.png,B\nc.png,C\n")
+    r = client.post(
+        "/batch",
+        data={"mode": "upload"},
+        files=[
+            ("csv_file", ("in.csv", csv_text.encode("utf-8"), "text/csv")),
+            ("images", ("a.png", b"aaa", "image/png")),
+            ("images", ("b.png", b"bbb", "image/png")),
+            ("images", ("c.png", b"ccc", "image/png")),
+        ],
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["item_count"] == 2  # truncated to the cap
+    problems = [e["problem"] for e in body["pairing_errors"]]
+    assert any("capped at 2" in p and "1 not processed" in p for p in problems)
 
 
 def test_run_batch_stream_dedups_identical_images(monkeypatch):

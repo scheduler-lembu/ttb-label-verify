@@ -141,12 +141,16 @@ def _proof(pct: str) -> int:
 
 
 def _printed_abv(pct: str, cat: str) -> str:
+    """Format the ABV as it appears on the label — spirits also show the (proof) so the
+    proof<->percent equivalence path (MR-02) gets exercised; wine/malt show percent only."""
     if cat == "spirits":
         return f"{pct}% Alc./Vol. ({_proof(pct)} Proof)"
     return f"{pct}% Alc./Vol."
 
 
 def base_fields(seq: int, cls=None):
+    """Deterministically pick a self-consistent field set (class -> category -> plausible ABV,
+    plus brand/producer/net/country) for sequence ``seq`` from the variety pools."""
     cls = cls or pick(CLASSES, seq * 7 + 3)
     class_type, cat = cls
     pct = pick(ABV_BY_CAT[cat], seq)
@@ -295,6 +299,7 @@ _RULE_LIGHT = (228, 231, 236)
 
 
 def render_label(printed: dict, warning_text):
+    """Draw one label's ``printed`` fields (+ optional warning block) onto a white canvas."""
     img = Image.new("RGB", (CANVAS_W, CANVAS_H), "white")
     draw = ImageDraw.Draw(img)
     left, right = MARGIN, CANVAS_W - MARGIN
@@ -327,6 +332,8 @@ def render_label(printed: dict, warning_text):
 
 
 def degrade(img: Image.Image) -> Image.Image:
+    """Rotate ~7deg + add fixed-seed noise to simulate an imperfect phone photo (NFR-05).
+    Falls back to rotation-only if numpy is unavailable."""
     rotated = img.rotate(-7, expand=True, fillcolor="white")
     try:
         import numpy as np
@@ -339,6 +346,7 @@ def degrade(img: Image.Image) -> Image.Image:
 
 
 def _display_name(app_row: dict, application_id: str) -> str:
+    """Human-friendly "Brand — Class/Type" label for the review UI (falls back to id)."""
     brand, class_type = app_row["brand"], app_row["class_type"]
     if brand and class_type:
         return f"{brand} — {class_type}"
@@ -346,6 +354,8 @@ def _display_name(app_row: dict, application_id: str) -> str:
 
 
 def main() -> None:
+    """Render every planned label PNG and write the lockstep application CSV, then print a
+    per-category breakdown and the multi-flag manifest so a tester can spot-check the corpus."""
     os.makedirs(DEMO_LABELS_DIR, exist_ok=True)
     os.makedirs(os.path.dirname(CSV_PATH), exist_ok=True)
 

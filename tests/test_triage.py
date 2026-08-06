@@ -33,6 +33,7 @@ FIELD_BUCKETS = [
 
 @pytest.mark.parametrize("field,label", FIELD_BUCKETS)
 def test_non_pass_field_lands_in_its_field_bucket(field, label):
+    # guards FR-11/FR-13: each non-PASS field routes to its own field bucket, carrying the field key, human label, and reason code.
     result = LabelResult.from_fields([_field(field, ResultReason.MISMATCH)])
     tags = bucket_tags_for(result)
     assert len(tags) == 1
@@ -43,12 +44,14 @@ def test_non_pass_field_lands_in_its_field_bucket(field, label):
 
 
 def test_clean_result_has_no_tags_and_is_clean():
+    # An all-PASS label produces zero bucket tags and reports is_clean == True.
     result = LabelResult.from_fields([_pass_field("brand"), _pass_field("warning")])
     assert bucket_tags_for(result) == []
     assert is_clean(result) is True
 
 
 def test_pass_field_is_never_bucketed():
+    # Only the failing field is bucketed; PASS fields are never added to a triage bucket.
     result = LabelResult.from_fields([
         _pass_field("brand"),
         _field("alcohol_content", ResultReason.MISMATCH),
@@ -58,6 +61,7 @@ def test_pass_field_is_never_bucketed():
 
 
 def test_multi_flag_result_tags_one_bucket_per_field():
+    # guards FR-11: a label wrong on two fields yields one bucket tag per failing field and is_clean == False.
     result = LabelResult.from_fields([
         _field("brand", ResultReason.MISMATCH),
         _field("alcohol_content", ResultReason.MISMATCH),
@@ -69,6 +73,7 @@ def test_multi_flag_result_tags_one_bucket_per_field():
 
 
 def test_whole_label_unreadable_collapses_to_single_bucket():
+    # guards FR-09/D-19: when the whole label is unreadable it collapses to ONE "unreadable_label" bucket, not seven noisy per-field tags.
     # Every field NEEDS_REVIEW / UNREADABLE == extractor-unavailable label.
     fields = [
         _field(k, ResultReason.UNREADABLE, verdict=ResultState.NEEDS_REVIEW,
@@ -84,6 +89,7 @@ def test_whole_label_unreadable_collapses_to_single_bucket():
 
 
 def test_partial_unreadable_is_not_the_whole_label_bucket():
+    # Boundary of the collapse: a partial read (not every field unreadable) stays on per-field buckets.
     # A mix (some PASS, one UNREADABLE) uses per-field buckets, not the collapse.
     result = LabelResult.from_fields([
         _pass_field("brand"),

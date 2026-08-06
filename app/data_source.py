@@ -65,6 +65,10 @@ class DemoCsvSource(ApplicationSource):
         self._apps: list[Application] = self._load()
 
     def _load(self) -> list[Application]:
+        # Load once at construction and hold in memory: the demo DB is small and
+        # read-only, so re-reading per request would be wasted I/O. A missing file
+        # or a CSV lacking the identity columns fails loudly here with a message
+        # naming the fix, rather than yielding silently empty results downstream.
         if not self.csv_path.exists():
             raise ValueError(
                 f"Demo application database not found: {self.csv_path}. "
@@ -84,6 +88,11 @@ class DemoCsvSource(ApplicationSource):
 
     @staticmethod
     def _row_to_application(row: dict) -> Application:
+        # Registry-driven split (see module docstring): a column is routed to
+        # ``expected`` only if its key is a real registry field, so only known
+        # fields ever reach the matcher; everything else rides along in ``extra``
+        # untouched. A blank registry cell becomes None (no expected value to
+        # check) rather than an empty string, which the matcher treats distinctly.
         expected: dict[str, str | None] = {}
         extra: dict[str, str] = {}
         for col, raw in row.items():

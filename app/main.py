@@ -66,12 +66,18 @@ VERDICT_LABELS = {
 # the review screen's image + re-ingest endpoints keep resolving; retention is
 # bounded (oldest evicted) in batch_create.
 BATCH_JOBS: dict = {}
-MAX_RETAINED_JOBS = 12
+# Bounded so a public 300-label run can't exhaust RAM: each demo job holds ~300
+# images in memory, and ~6 jobs' worth fits comfortably in the 1 GB Fly VM.
+# Oldest job is evicted when over the cap (see batch_create).
+MAX_RETAINED_JOBS = 6
 BATCH_TEMPLATE_PATH = "sample_data/batch_template.csv"
 FAVICON_PATH = "app/static/favicon.svg"
 
 
 def _short(text, limit=80):
+    # Truncate long extracted/expected strings for display so a table cell or the
+    # batch "attention" summary stays scannable (NFR-03); the full value is never
+    # required in the readout, only enough to recognise the field.
     if text is None:
         return None
     text = str(text)
@@ -79,6 +85,13 @@ def _short(text, limit=80):
 
 
 def _build_rows(result: LabelResult):
+    """Shape the engine's per-field verdicts into display rows: extracted value
+    shown next to expected value with a PASS/FAIL/NEEDS_REVIEW verdict (FR-03,
+    FR-04). The warning field is special-cased — it is checked against the
+    canonical 27 CFR text, not an application-supplied value, so its "expected"
+    column shows the regulation reference rather than a per-item string. The
+    machine reason is surfaced only for non-PASS rows (a passing row needs no
+    explanation)."""
     rows = []
     for fr in result.fields:
         if fr.field == "warning":
@@ -99,6 +112,9 @@ def _build_rows(result: LabelResult):
 
 
 def _overall_message(result: LabelResult):
+    """Compose the one-line plain-language verdict shown above the field table.
+    Deliberately non-technical ("Needs a human look", "Problems found") so an
+    untrained reviewer knows the single next action at a glance (NFR-03)."""
     fail = sum(1 for f in result.fields if f.verdict == ResultState.FAIL)
     review = sum(1 for f in result.fields if f.verdict == ResultState.NEEDS_REVIEW)
     if result.overall == ResultState.PASS:
@@ -113,6 +129,10 @@ def _overall_message(result: LabelResult):
 
 
 def _render(request, values=None, error=None, result=None):
+    """Render the single-label page for every case — first load, a re-render
+    carrying an error message, and the post-verify results view — from one code
+    path. ``values`` preserves what the reviewer typed so a validation error
+    never wipes the form (NFR-03)."""
     ctx = {
         "request": request,
         "form_fields": FORM_FIELDS,
@@ -127,6 +147,12 @@ def _render(request, values=None, error=None, result=None):
 
 
 def _batch_item_payload(item, result: LabelResult):
+    """Build the JSON one batch item is streamed to the client as (FR-11 per-item
+    result). Bundles the overall verdict, a short "attention" summary of the
+    flagged fields, the full per-field readout, and the triage buckets this label
+    belongs in (so the client can group/auto-clear as each result arrives, D-14 /
+    FR-13). Sent verbatim over SSE — the browser renders rows progressively so the
+    reviewer is never blocked waiting for the whole batch (NFR-02)."""
     attention = [
         f"{FIELD_LABELS.get(fr.field, fr.field)}: {VERDICT_LABELS.get(fr.verdict, fr.verdict.value)}"
         for fr in result.fields if fr.verdict != ResultState.PASS
@@ -168,6 +194,8 @@ async def single_label_page(request: Request):
 
 @app.get("/health")
 async def health():
+    # Liveness probe for the deploy platform (Fly): cheap, no dependencies, so a
+    # model-provider outage never marks the VM unhealthy (CON-03 public reach).
     return JSONResponse({"status": "ok"})
 
 
@@ -179,6 +207,12 @@ async def favicon():
 
 @app.post("/verify", response_class=HTMLResponse)
 async def verify_route(request: Request):
+    """Run one label through the accurate single-label engine and re-render with
+    results (FR-01/FR-02). Every failure mode a bad upload can produce — missing
+    file, unreadable stream, empty bytes, oversize, or an engine exception — is
+    caught and turned into a clear on-page message instead of a 500: the HTTP
+    surface must never crash on malformed input (NFR-06). The size check runs
+    before any model call so an oversize file is rejected cheaply, not paid for."""
     settings = get_settings()
     form = await request.form()
     values = {f.key: (str(form.get(f.key) or "")).strip() for f in FORM_FIELDS}
@@ -224,20 +258,46 @@ async def batch_template():
 
 @app.post("/batch")
 async def batch_create(request: Request):
+    """Prepare a batch and return its job_id (the stream endpoint runs it). Two
+    entry modes (D-22): "demo" pairs the bundled application DB to its on-disk
+    images, "upload" pairs a user CSV to uploaded images by filename. Pairing is
+    done here — not during streaming — so problems (unmatched rows/images) are
+    reported synchronously as ``pairing_errors`` while good items still run. All
+    parse/pairing failures are caught and returned as 400s, never a 500 (NFR-06).
+    The trusted bundled demo is exempt from MAX_BATCH_ITEMS; user uploads are
+    capped. Jobs are held in memory only (CON-02 / D-8), bounded by evicting the
+    oldest so a public run can't exhaust the VM's RAM."""
     settings = get_settings()
     form = await request.form()
     mode = form.get("mode") or "demo"
+    # Notices surfaced alongside pairing errors in the same banner: per-item
+    # oversize skips (FIX #15) and the truncation notice (FIX #17). Kept ahead of
+    # pairing errors so the always-important truncation line isn't hidden behind
+    # the client's first-N slice.
+    notices: list = []
     try:
         if mode == "upload":
             csv_upload = form.get("csv_file")
             if csv_upload is None or not getattr(csv_upload, "filename", ""):
                 return JSONResponse({"error": "Choose a CSV of expected values, or use the demo."}, status_code=400)
             csv_bytes = await csv_upload.read()
+            # Per-item size guard: an image over MAX_UPLOAD_MB is skipped (not added
+            # to the pairing dict) and reported, so one huge file can't be processed.
+            # This is the same setting the single-label /verify route enforces. It is
+            # NOT a total-request cap — that memory boundary is a documented prototype
+            # limit (GA-3); this only stops one oversized item.
+            max_bytes = settings.MAX_UPLOAD_MB * 1024 * 1024
             images = {}
             for up in form.getlist("images"):
                 fn = getattr(up, "filename", "")
-                if fn:
-                    images[os.path.basename(fn)] = await up.read()
+                if not fn:
+                    continue
+                data = await up.read()
+                if len(data) > max_bytes:
+                    notices.append({"reference": os.path.basename(fn),
+                                    "problem": f"too large, over {settings.MAX_UPLOAD_MB} MB — skipped"})
+                    continue
+                images[os.path.basename(fn)] = data
             items, errors = build_uploaded_items(csv_bytes, images)
         else:
             items, errors = build_demo_items(settings)
@@ -247,11 +307,17 @@ async def batch_create(request: Request):
         return JSONResponse({"error": "Couldn't prepare that batch. Check the CSV and images."}, status_code=400)
 
     # The trusted bundled demo (~300) is exempt from the per-upload cap; the cap
-    # still guards user CSV uploads (MAX_BATCH_ITEMS).
+    # still guards user CSV uploads (MAX_BATCH_ITEMS). When it truncates, tell the
+    # user how many were dropped instead of silently discarding the overflow.
     if mode != "demo" and len(items) > settings.MAX_BATCH_ITEMS:
+        dropped = len(items) - settings.MAX_BATCH_ITEMS
         items = items[: settings.MAX_BATCH_ITEMS]
+        notices.insert(0, {"reference": "batch", "problem": (
+            f"Batch capped at {settings.MAX_BATCH_ITEMS}: processed the first "
+            f"{settings.MAX_BATCH_ITEMS}, {dropped} not processed. Split into "
+            "smaller batches to check the rest.")})
 
-    pairing_errors = [{"reference": e.reference, "problem": e.problem} for e in errors]
+    pairing_errors = notices + [{"reference": e.reference, "problem": e.problem} for e in errors]
     if not items:
         return JSONResponse({"error": "No labels to check.", "pairing_errors": pairing_errors}, status_code=400)
 
@@ -267,6 +333,10 @@ async def batch_create(request: Request):
 
 
 def _sniff_image_mime(data: bytes) -> str:
+    # Derive the content-type from the file's own magic bytes rather than a
+    # stored extension: images are held in memory with no path on disk (D-8), and
+    # sniffing the bytes avoids trusting a client-supplied filename. Defaults to
+    # PNG when no signature matches.
     if data[:3] == b"\xff\xd8\xff":
         return "image/jpeg"
     if data[:6] in (b"GIF87a", b"GIF89a"):
@@ -323,6 +393,10 @@ async def batch_reverify(job_id: str, image_filename: str):
 
 @app.get("/batch/{job_id}/stream")
 async def batch_stream(job_id: str):
+    """Run the prepared job and stream each result the moment it finishes over SSE
+    (NFR-02: results populate progressively, the reviewer is never blocked), then
+    a final summary event with the pass/fail/needs-review counts (FR-11). The
+    concurrency cap is applied inside run_batch_stream via MAX_CONCURRENCY (D-22)."""
     items = BATCH_JOBS.get(job_id)
     if items is None:
         return JSONResponse({"error": "Unknown or expired batch."}, status_code=404)

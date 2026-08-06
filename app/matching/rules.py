@@ -60,7 +60,17 @@ def _is_empty(value: "str | None") -> bool:
 # Brand (MR-01)
 # --------------------------------------------------------------------------- #
 def match_brand(expected: "str | None", extracted: "str | None") -> FieldResult:
-    """MR-01: case- and punctuation-insensitive brand comparison."""
+    """MR-01: case- and punctuation-insensitive brand comparison.
+
+    WHY normalized + fuzzy (not exact): a brand is the same brand whether the
+    label prints "STONE'S THROW", "Stone's Throw", or "Stones Throw" — case and
+    punctuation carry no legal meaning here, so we fold them away
+    (``normalize_general``) and then allow a fuzzy gray band for OCR noise.
+    WHY non-ASCII short-circuits to review: accented/non-Latin text is outside
+    the English-only scope (MA-5); rather than risk a wrong PASS/FAIL on a
+    character we can't safely compare, a human decides (D-3 bias against a false
+    PASS).
+    """
     if _is_empty(expected):  # [D1] blank required field -> categorized review
         return FieldResult(
             field="brand",
@@ -96,6 +106,9 @@ def match_brand(expected: "str | None", extracted: "str | None") -> FieldResult:
         )
     else:
         score = fuzz.token_sort_ratio(norm_expected, norm_extracted)
+        # Brand thresholds per MA-3: pass >=90, review >=75, else FAIL. The wide
+        # review band (75-89) is deliberate — a near-miss brand is exactly the
+        # case where a confident wrong PASS would be worst, so it goes to a human.
         if score >= 90:
             verdict, reason, note = ResultState.PASS, ResultReason.MATCH, f"fuzzy match (score {score:.0f})"
         elif score >= 75:
@@ -140,7 +153,16 @@ def parse_strength(s: "str | None") -> "float | None":
 
 
 def match_abv(expected: "str | None", extracted: "str | None") -> FieldResult:
-    """MR-02/03: ABV/proof equivalence; absence -> categorized review (D-12)."""
+    """MR-02/03: ABV/proof equivalence; absence -> categorized review (D-12).
+
+    WHY equivalence (not string match): "45%" and "90 proof" describe the same
+    strength (proof = 2 x ABV%), so both are parsed to an ABV number before
+    comparing (MR-02). WHY a tolerance: rounding/print variance is normal, so
+    values within +-0.15 ABV are treated equal (MA-3). WHY absence is NOT a FAIL:
+    ABV may legitimately be omitted on some labels (MR-03); an expected-side
+    blank is a data gap for a human to confirm, not a compliance failure, so it
+    routes to NEEDS_REVIEW (D-12) rather than PASS (never guess) or FAIL.
+    """
     ev = parse_strength(expected)
     xv = parse_strength(extracted)
 
@@ -164,7 +186,7 @@ def match_abv(expected: "str | None", extracted: "str | None") -> FieldResult:
                 ResultReason.UNREADABLE,
                 "couldn't read alcohol content",
             )
-        elif abs(ev - xv) <= 0.15:
+        elif abs(ev - xv) <= 0.15:  # MA-3 fixed tolerance: +-0.15 ABV absorbs rounding/print variance
             verdict, reason, note = (
                 ResultState.PASS,
                 ResultReason.MATCH,
@@ -194,8 +216,19 @@ def match_abv(expected: "str | None", extracted: "str | None") -> FieldResult:
 def match_warning(expected: "str | None", extracted: "str | None") -> FieldResult:
     """MR-04/05: exact match to the canonical warning + all-caps prefix check.
 
-    ``expected`` is ignored — the reference is the stored canonical constant.
-    Strictness is unchanged this pass; only reason codes are added.
+    WHY strict here and nowhere else: the warning is the ONE field where fuzzy
+    matching is *wrong* — a single altered/dropped word (e.g. "may cause" ->
+    "can cause") is a real compliance defect that must FAIL, not be smoothed
+    over (MR-04, D-13, MA-9). So the body is compared char-for-char against the
+    stored canonical constant after whitespace-ONLY normalization (D-4): line
+    breaks/OCR spacing are noise, but case and punctuation are load-bearing.
+    WHY ``expected`` is ignored: the reference is the verified statute text
+    (``CANONICAL_GOVERNMENT_WARNING``), not the applicant's typed value — the
+    applicant cannot redefine the required wording.
+    WHY the prefix is checked separately (MR-05): "GOVERNMENT WARNING" must be
+    all-caps by regulation, so title-case "Government Warning" FAILs even if the
+    rest of the sentence is perfect — checked on the literal read before the
+    body comparison.
     """
     if _is_empty(extracted):
         return FieldResult(
@@ -315,6 +348,9 @@ def match_supporting(
         )
     else:
         score = fuzz.token_sort_ratio(norm_expected, norm_extracted)
+        # Supporting thresholds per MA-3: pass >=85, review >=70, else FAIL. Set
+        # slightly looser than brand (90/75) because these free-text fields
+        # (producer address, class/type) carry more benign print variation.
         if score >= 85:
             verdict, reason, note = ResultState.PASS, ResultReason.MATCH, f"fuzzy match (score {score:.0f})"
         elif score >= 70:

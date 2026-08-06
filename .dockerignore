@@ -1,0 +1,50 @@
+# Keep non-runtime and secret files out of the image.
+#
+# CRITICAL: .env must never enter the image — the API key is supplied on Fly as
+# a runtime secret, never baked into a layer.
+.env
+*.env
+!.env.example
+
+# Version control + local tooling.
+.git
+.gitignore
+.gitattributes
+.claude
+
+# Python caches / build artifacts.
+__pycache__
+**/__pycache__
+*.py[cod]
+*$py.class
+*.egg-info
+.eggs
+build
+dist
+
+# Virtual environments.
+.venv
+venv
+env
+ENV
+
+# Test / tooling caches.
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+
+# Not needed at runtime.
+tests
+test_labels
+tools
+
+# Handoff notes.
+COWORK_HANDOFF_*.md
+
+# OS / editor cruft.
+.DS_Store
+Thumbs.db
+.idea
+.vscode

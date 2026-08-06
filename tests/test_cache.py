@@ -15,12 +15,14 @@ from app.extraction.base import ExtractionResult
 # ImageCache
 # --------------------------------------------------------------------------- #
 def test_key_stable_and_distinct():
+    # Cache key is a content hash: same bytes -> same key, different bytes -> different key.
     c = ImageCache()
     assert c.key(b"same-bytes") == c.key(b"same-bytes")
     assert c.key(b"image-A") != c.key(b"image-B")
 
 
 def test_put_get_roundtrip():
+    # A stored ExtractionResult comes back by identity (the same object, not a copy).
     c = ImageCache()
     k = c.key(b"img")
     value = ExtractionResult(fields={"brand": "X"}, ok=True)
@@ -29,6 +31,7 @@ def test_put_get_roundtrip():
 
 
 def test_get_missing_returns_none_no_raise():
+    # A missing key returns None rather than raising (callers treat a miss as "extract").
     c = ImageCache()
     assert c.get("no-such-key") is None
 
@@ -47,6 +50,7 @@ class _FakeExtractor:
 
 
 def test_extract_batch_dedups_same_image(monkeypatch):
+    # guards NFR-02 cost/latency: identical image bytes extract once; a distinct image extracts again.
     counter = {"n": 0}
     monkeypatch.setattr(router, "get_batch_extractor", lambda: _FakeExtractor(counter))
     cache = ImageCache()
@@ -60,6 +64,7 @@ def test_extract_batch_dedups_same_image(monkeypatch):
 
 
 def test_extract_batch_does_not_cache_failures(monkeypatch):
+    # A failed extraction is NOT cached, so a later call re-attempts from scratch (no poisoned cache).
     monkeypatch.setattr(router, "_RETRY_BACKOFF_S", 0.0)  # keep the test instant
     counter = {"n": 0}
     monkeypatch.setattr(router, "get_batch_extractor", lambda: _FakeExtractor(counter, ok=False))
@@ -78,6 +83,7 @@ def test_extract_batch_does_not_cache_failures(monkeypatch):
 # Model wiring: batch = BATCH_MODEL, single = PRIMARY_MODEL
 # --------------------------------------------------------------------------- #
 def test_batch_extractor_uses_batch_model_single_uses_primary():
+    # Wiring guard: batch path uses BATCH_MODEL + long timeout; single path uses PRIMARY_MODEL + fail-fast budget (NFR-01).
     s = get_settings()
     batch = router.get_batch_extractor()
     single = router.get_single_extractor()
@@ -106,6 +112,7 @@ class _FailThenSucceed:
 
 
 def test_extract_batch_retries_then_succeeds(monkeypatch):
+    # Batch reliability: one transient failure is retried and the retry's success is returned.
     monkeypatch.setattr(router, "_RETRY_BACKOFF_S", 0.0)  # keep the test instant
     counter = {"n": 0}
     monkeypatch.setattr(router, "get_batch_extractor",
@@ -118,6 +125,7 @@ def test_extract_batch_retries_then_succeeds(monkeypatch):
 
 
 def test_extract_batch_gives_up_after_max_retries(monkeypatch):
+    # Batch reliability: retries are capped at BATCH_MAX_RETRIES (no infinite loop on a persistent failure).
     monkeypatch.setattr(router, "_RETRY_BACKOFF_S", 0.0)
     counter = {"n": 0}
     # fail_first huge -> always fails
@@ -131,6 +139,7 @@ def test_extract_batch_gives_up_after_max_retries(monkeypatch):
 
 
 def test_extract_batch_cache_hit_skips_calls_and_retry(monkeypatch):
+    # A cache hit short-circuits entirely: zero extractor calls and no retry loop.
     monkeypatch.setattr(router, "_RETRY_BACKOFF_S", 0.0)
     counter = {"n": 0}
     monkeypatch.setattr(router, "get_batch_extractor",

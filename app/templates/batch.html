@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TTB Batch Verification</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/static/style.css?v=16" />
+  <link rel="stylesheet" href="/static/style.css?v=17" />
 </head>
 <body>
   <svg class="svg-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -43,6 +43,9 @@
 
   <main class="page">
     <div id="pipeline-view">
+    <!-- Upload area (heading + intro + both cards) — moves BELOW the results as
+         one unit once a batch has run; see #pipeline-view.has-results in CSS. -->
+    <div class="upload-area" id="upload-area">
     <header class="head">
       <h1>Check a batch of labels</h1>
       <p class="tagline">Check many labels at once. Clean labels clear themselves; the rest are grouped by which field needs a look.</p>
@@ -78,9 +81,13 @@
         </form>
       </div>
     </section>
+    </div><!-- /#upload-area -->
 
     <div class="error-banner" id="batch-error" role="alert" hidden></div>
 
+    <!-- Batch results — filled progressively as SSE 'item' events stream in
+         (NFR-02, requires JS). The summary/flash/done lines are live status;
+         the buckets below group flagged labels by which field needs a human. -->
     <section class="results" id="batch-results" hidden>
       <div class="triage-summary" id="triage-summary">Starting&hellip;</div>
       <div class="triage-reviewed" id="triage-reviewed" hidden></div>
@@ -162,6 +169,6 @@
     </section>
   </main>
 
-  <script src="/static/batch.js?v=16"></script>
+  <script src="/static/batch.js?v=17"></script>
 </body>
 </html>

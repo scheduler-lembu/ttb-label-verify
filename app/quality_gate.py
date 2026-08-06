@@ -1,10 +1,11 @@
 """Pre-extraction image quality gate.
 
 Single responsibility: a cheap, dependency-light pre-flight check of whether an
-uploaded image is readable enough to bother extracting. It runs BEFORE any
-AI/API call, so an undecodable, blank, or too-blurry upload costs nothing and is
-routed to the "request a better image" path (NFR-05) instead of spending a paid
-vision call on something no human could read either.
+uploaded image is readable enough to bother extracting. It is the pre-extraction
+OpenCV quality gate (D-15): it runs BEFORE any AI/API call, so an undecodable,
+blank, or too-blurry upload costs nothing and is routed to the "request a better
+image" path (NFR-05) instead of spending a paid vision call on something no human
+could read either.
 
 This is a **heuristic** guard, not a calibrated image-quality model:
   * blur  → variance of the Laplacian (low variance = few edges = blurry/out of focus)

@@ -6,6 +6,13 @@ fields ONLY — no judgment — and to reproduce the Government Warning **verbat
 (character-for-character, preserving case and punctuation), because the
 downstream exact-match check (MR-04/05) depends on a faithful transcription and
 a clean field boundary (MA-10).
+
+This is the "AI reads" half of "AI reads, code judges" (GA-1): the prompt's
+transcribe-only framing keeps the model out of the verdict entirely, so the
+deterministic matcher — not the LLM — owns every PASS/FAIL and the bias against
+false PASS (D-3). Verbatim/no-normalize is load-bearing precisely so a
+format-evasion (e.g. title-casing the warning prefix) survives transcription for
+the matcher to catch (MR-05/MR-06) instead of being silently "fixed" by the model.
 """
 
 from __future__ import annotations

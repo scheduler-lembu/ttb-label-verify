@@ -74,6 +74,8 @@ def _get(name: str, default: str) -> str:
 
 
 def _get_int(name: str, default: int) -> int:
+    # Robust parse: a malformed knob falls back to its default rather than
+    # crashing process startup (misconfigured env must not take the demo down).
     try:
         return int(float(_get(name, str(default))))
     except (TypeError, ValueError):
@@ -81,6 +83,7 @@ def _get_int(name: str, default: int) -> int:
 
 
 def _get_float(name: str, default: float) -> float:
+    # Same fail-safe-to-default contract as _get_int (see above).
     try:
         return float(_get(name, str(default)))
     except (TypeError, ValueError):

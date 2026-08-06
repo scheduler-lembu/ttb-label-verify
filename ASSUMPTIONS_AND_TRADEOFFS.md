@@ -74,6 +74,22 @@ limitation as we build, so the final README writeup is already done and every
 | MA-9 | "Exact" = exact characters including case in the body, not just wording. | Strictest defensible reading of MR-04 (D-13). | Medium — re-cased/reformatted-but-correct warnings FAIL; overridable. |
 | MA-10 | The extractor delivers each field (esp. the warning) as a clean, bounded value — no trailing text scooped in. | Exact-match assumes the warning field isn't polluted (e.g. "CONTAINS SULFITES"). | Medium — pushed onto HANDOFF #3's extraction prompt. |
 | MA-11 | The Government Warning is the last statement block on the label, so anchoring on the case-insensitive "government warning" text and taking to end captures it without vision bounding boxes | The prototype vision extractor returns fields, not coordinates | Low — true for standard TTB layouts; unusual layouts make the reads disagree → NEEDS_REVIEW |
+| MA-12 | **FR-04 is satisfied by a co-located adjudication view:** the label image, the application (expected) data, and the model's reading are shown together in one view, alongside the per-field verdict and reason. | "Extracted value next to expected value" requires the agent to see the evidence, not just a verdict; a compliance decision aid earns trust by showing its work and letting the agent overrule the machine. It reproduces the manual eye-check (brand/ABV/warning) in one glance. | Low — transparency is the higher value for a compliance tool; tradeoff is screen space over a terser verdict-only view. Production path: field-level highlight overlays on the image via bounding boxes. |
+| MA-13 | **FR-12 override is delivered through the review workflow, not a separate control**, and clean auto-matches do not demand per-item attention. An agent Approves flagged items field-by-field in the error folders until an application reads cleared, and can Reject based on what they see. Fully-matching applications auto-clear into the Approved/Cleared folder. | The three-state model already routes every uncertain case to a human; forcing the agent to also click through perfect matches would recreate the manual drudgery the tool exists to remove. FR-12 is a *Could*, and the brief prefers a clean core over ambitious extras. | Owned tradeoff: the agent does not see every application in the main flow — they rely on the auto-clear for clean matches and drill into the Approved pile on demand. This assumes extraction+matching is reliable enough to trust on unambiguous matches — exactly what the test-label catalog and the bias-to-review design defend. Production path: a configurable "show all" mode and one-click bulk override for supervisors. |
+
+---
+
+## C.1 Security & AI-Governance Posture (stated explicitly — the assumptions a Treasury AI reviewer will look for)
+
+These consolidate posture decisions that also live in D-2/D-3/D-8/D-9 and MA-6/MA-7, so
+the system's stance on *secure and ethical AI deployment* is legible in one place rather
+than inferred. Each is an owned decision with a tradeoff and a production path.
+
+| ID | Posture assumption | Rationale (the stance) | Owned boundary / production path |
+|---|---|---|---|
+| GA-1 | **The AI is a decision aid, never the decider — and the human stays accountable.** The model only transcribes; every PASS/FAIL/NEEDS_REVIEW verdict is produced by deterministic code. Unambiguous matches auto-clear; anything requiring judgment is routed to a human. Model non-determinism is treated as a known, bounded risk (low temperature, structured output, verbatim-warning prompting, and the NEEDS_REVIEW escape hatch), so misreads surface for review rather than passing silently. | A confident-but-wrong PASS is the worst failure mode in a compliance system; authority over consequential decisions must rest with a person and with auditable code, not with a probabilistic model. This is the ethical core of the design, not only an architectural one. | We assume occasional misreads and design so they are flagged, not absorbed. Production path: literal-OCR cross-check on the graded warning field (already the documented next step) further removes model paraphrase risk; confidence thresholds tuned on real data. |
+| GA-2 | **Cybersecurity-by-design: no persistence, secrets never in code, network-aware deployment.** Submitted images are processed in memory and discarded — there is no data store to breach and no retention obligation incurred. The API key is supplied as a deployment secret / environment variable and is never committed to the repository. The deployed demo runs on a public host where cloud AI is reachable; the production path swaps the extraction call to an in-tenant Azure endpoint, which also clears TTB's outbound-firewall block on external ML endpoints. | Security posture is a design input, not an afterthought. Treating "no persistence" as a security property (nothing stored = nothing leaked), keeping secrets out of source, and designing around the known network restriction are the cybersecurity-by-design instincts a regulatory AI system is judged on. | We assume the firewall constrains TTB's network, not our public demo host, and document the in-tenant production swap rather than pretending the demo topology is the production one. Production path: Azure OpenAI / Azure AI Document Intelligence over a private endpoint inside TTB's tenant; SSO / federal identity replaces the open demo. |
+| GA-3 | **The prototype is deliberately not production-hardened, and the boundary is drawn explicitly.** Public and effectively unauthenticated (so Treasury can open and test it without accounts), guarded against cost/abuse by the bring-your-own-key + spend-cap mechanism rather than by full auth. No PII handling, no audit log, no document-retention compliance. | For a proof-of-concept, an honest boundary line is more trustworthy than a prototype pretending to be secure. The brief explicitly favors a clean working core over ambitious-but-incomplete hardening; naming exactly what is and isn't in scope is the responsible engineering signal. | Owned tradeoff: anyone with the URL can run the demo; the spend cap bounds the cost and the BYOK path shifts spend to the visitor. Production path: SSO / federal identity, encryption-at-rest, audit logging, and retention controls — enumerated, not hand-waved. |
 
 ---
 
@@ -116,8 +132,13 @@ limitation as we build, so the final README writeup is already done and every
 1. **Not production-secure.** No auth, no encryption-at-rest guarantees, no PII
    handling, no audit log. By design (CON-02, OOS-02).
 2. **No COLA integration.** Expected values are entered, not fetched (OOS-01).
-3. **Font-forensics is best-effort.** Bold-weight and precise "too small / buried"
-   detection are surfaced as *Needs Review* signals, not rigorous measurements (D-5).
+3. **Font-size / "buried text" detection (MR-06) is deferred and not implemented.**
+   MR-06 is a *Could*; the exact-text and all-caps-prefix checks (MR-04/05, both *Must*)
+   are fully implemented, but no font-size, bold-weight, or "too small / buried"
+   measurement exists in the prototype. The design and production path (bounding-box +
+   font metrics via Azure Document Intelligence) are documented (D-5). A tiny warning may
+   still land in *Needs Review* incidentally when the literal-OCR cross-check disagrees
+   with the vision read, but that is an OCR-disagreement signal, not a size measurement.
 4. **AI transcription is non-deterministic.** Rare mis-reads possible; mitigated by
    low temperature, structured output, verbatim-warning prompting, and the
    Needs-Review escape hatch. It is a *decision aid*, not an infallible authority.
@@ -164,6 +185,10 @@ limitation as we build, so the final README writeup is already done and every
     not the verdict, so results stay correct when the same image is checked against
     different application data. Single-label stays on PRIMARY_MODEL (Terra) for
     graded accuracy.
+18. **Latency is a measured median, not a guaranteed SLA.** Single-label verification ran
+    ~2s median (min 1.8s, max 4.4s) on the synthetic test-label catalog, within the ~5s
+    design target (NFR-01). Real phone photos and live network conditions can vary; the
+    ~5s bar is a design target met on the test set, not a hard per-request guarantee.
 
 ---
 

@@ -11,6 +11,10 @@ statement, so it is stored as a single continuous line.
 
 from __future__ import annotations
 
+# The single verified reference constant (MA-2), sourced from the statute — not
+# typed from memory. match_warning compares against THIS char-for-char (MR-04),
+# so any edit to the wording, casing, or punctuation below would silently change
+# what "compliant" means for every label. Do NOT edit this string.
 # Source: eCFR 27 CFR 16.21, Title 27 current as of 2026-07-24. Verbatim; do not edit wording.
 CANONICAL_GOVERNMENT_WARNING: str = (
     "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not "

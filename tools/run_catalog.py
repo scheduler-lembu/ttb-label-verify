@@ -59,11 +59,15 @@ EXPECTED_OVERALL = {
 
 
 def _load_rows() -> "list[dict]":
+    """Read the catalog's companion CSV (one expected-values row per label image)."""
     with open(CSV_PATH, newline="", encoding="utf-8") as fh:
         return list(csv.DictReader(fh))
 
 
 def main() -> None:
+    """Run every catalog label through the REAL verify_label pipeline, print each label's
+    overall/per-field verdicts + timing and MATCH/DIFFERS vs EXPECTED_OVERALL, then a timing
+    summary. Exits 0 with a clear message (no crash) when no API key is configured."""
     settings = get_settings()
     if not settings.has_api_key():
         print(

@@ -1,5 +1,12 @@
 "use strict";
 
+/*
+ * Single-label page — progressive enhancement only (D-21). The <form> posts to
+ * /verify and works with JS disabled; this script only adds conveniences:
+ * drag-and-drop onto the upload zone, a client-side thumbnail preview, and a
+ * "Checking…" button state on submit. No verification logic lives here — the
+ * server does the extraction/adjudication and re-renders the results table.
+ */
 (function () {
   var fileInput = document.getElementById("label-file");
   var fileName = document.getElementById("file-name");
@@ -8,6 +15,7 @@
   var form = document.getElementById("verify-form");
   var button = document.getElementById("verify-button");
 
+  // Reflect the chosen/dropped file: show its name and, for images, a preview thumb.
   function showFile(file) {
     if (!file) return;
     if (fileName) fileName.textContent = file.name;
@@ -36,6 +44,8 @@
     });
   }
 
+  // On submit, disable the single primary button and show progress so a slow verify
+  // never looks frozen (NFR-06). The plain POST still proceeds and the server re-renders.
   if (form && button) {
     form.addEventListener("submit", function () {
       button.disabled = true;

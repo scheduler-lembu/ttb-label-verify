@@ -41,18 +41,21 @@ def test_single_label_page_kept_at_single():
 
 
 def test_health_ok():
+    # Liveness/health probe returns {"status": "ok"} (used by the deploy platform).
     r = client.get("/health")
     assert r.status_code == 200
     assert r.json().get("status") == "ok"
 
 
 def test_verify_no_file_shows_message():
+    # guards FR-01/NFR-06: POST with no image returns a clear "choose a file" message, not a crash.
     r = client.post("/verify", data={"brand": "OLD TOM"})
     assert r.status_code == 200
     assert "Choose a label image" in r.text
 
 
 def test_verify_blank_image_needs_review():
+    # guards FR-09/D-15: a blank upload trips the quality gate -> NEEDS_REVIEW BEFORE any API call, asks for a clearer photo.
     r = client.post(
         "/verify",
         data={"brand": "OLD TOM DISTILLERY", "alcohol_content": "45%"},

@@ -119,17 +119,30 @@ class OpenAIVisionExtractor(Extractor):
             # Imported lazily so the rest of the app imports without the SDK.
             from openai import OpenAI
 
+            # Latency hardening (D-20/NFR-01). Each knob keeps a slow call inside
+            # the ~5s single-label budget by degrading to NEEDS_REVIEW instead of
+            # blowing it: max_retries=0 stops the SDK from silently multiplying a
+            # slow request into a retry-balloon (batch retry is the router's job);
+            # timeout is the per-request hang ceiling — a stall raises and fails
+            # safe rather than hanging.
             client = OpenAI(
                 api_key=self.settings.API_KEY,
                 timeout=self.timeout_s,
                 max_retries=0,  # no silent retry-balloon; batch retry is handled in the router
             )
+            # Downscale oversized images before the vision call (D-20): fewer image
+            # tokens = faster upload + faster model read, without hurting a legible
+            # label. _prepare_image is fail-safe — a resize error sends originals.
             proc_bytes, mime = _prepare_image(image_bytes, self.settings.VISION_MAX_IMAGE_DIM)
             b64 = base64.b64encode(proc_bytes).decode("ascii")
             data_url = f"data:{mime};base64,{b64}"
 
             response = client.responses.create(
                 model=self.model,
+                # Low reasoning effort + a hard output-token cap (D-20): this is a
+                # transcribe-only job (GA-1), so deep reasoning would only burn
+                # latency, and the reply is a small fixed-shape JSON object — no
+                # reason to let it run long.
                 reasoning={"effort": "low"},  # transcription needs no deep reasoning
                 max_output_tokens=self.settings.MAX_OUTPUT_TOKENS,
                 input=[

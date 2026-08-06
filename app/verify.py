@@ -57,7 +57,13 @@ def _all_needs_review(
 
 def _downgrade_warning_on_disagreement(label_result: LabelResult) -> LabelResult:
     """If the warning currently PASSes, drop it to NEEDS_REVIEW (reads disagree).
-    Only touches a PASS -> more conservative only; never relaxes FAIL/REVIEW."""
+    Only touches a PASS -> more conservative only; never relaxes FAIL/REVIEW.
+
+    This is the one-directional, safety-only half of the literal-OCR cross-check
+    (D-16/D-18): a vision PASS on the single graded exact field can be pulled back
+    to NEEDS_REVIEW, but a FAIL or an existing NEEDS_REVIEW is left untouched so
+    the cross-check can only ever add caution, never manufacture a PASS (D-3 bias
+    against false PASS)."""
     new_fields = []
     changed = False
     for fr in label_result.fields:
@@ -98,6 +104,11 @@ def verify_label_with(image_bytes: bytes, expected: dict, extract_fn) -> LabelRe
             )
 
     # STAGE 2: parallel read — vision extract + (optional) literal OCR of the warning.
+    # xcheck_active gates on the config flag AND Tesseract actually being callable
+    # (D-19): if the binary is absent we silently skip the cross-check and trust the
+    # vision read rather than failing. Running the two reads concurrently in a thread
+    # pool (D-17) means the literal-OCR safety check adds ~no wall-clock to the ~5s
+    # budget (NFR-01) — both are I/O-bound, so they overlap.
     xcheck_active = settings.WARNING_XCHECK_ENABLED and is_tesseract_available()
     with ThreadPoolExecutor(max_workers=2) as ex:
         vlm_future = ex.submit(extract_fn, image_bytes)
@@ -112,6 +123,9 @@ def verify_label_with(image_bytes: bytes, expected: dict, extract_fn) -> LabelRe
     label_result = run_matchers(expected, result.fields)
 
     # STAGE 4: warning cross-check — literal OCR can only make a PASS more cautious.
+    # VLMs paraphrase/"clean up" text, which is exactly the false-PASS risk on the
+    # verbatim warning; a literal reader catches divergence (D-16). The downgrade is
+    # one-directional (D-18) — see _downgrade_warning_on_disagreement.
     if xcheck_active and ocr is not None and ocr.available:
         vlm_warning = result.fields.get("warning")
         if not warning_reads_agree(vlm_warning, ocr.text, settings.WARNING_XCHECK_THRESHOLD):

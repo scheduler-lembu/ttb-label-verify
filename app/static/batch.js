@@ -117,6 +117,8 @@
     setNavActive("pipeline");
     updateBell();
     resultsSec.hidden = false;
+    // Results now present -> move the upload area below them (see CSS reorder).
+    pipelineView.classList.add("has-results");
     summaryEl.textContent = "Starting…";
     // Normalize history to the overview base for this batch session.
     try { history.replaceState({ view: "overview" }, "", location.pathname); } catch (e) {}
@@ -394,6 +396,8 @@
     if (b && b.appIds.length > 0) { state.reviewIndex += 1; renderReview(b.appIds[0], state.currentBucket); }
     else { pendingFlash = "This bucket is clear."; history.back(); }  // back to the overview page
   }
+  // Approve this field (FR-12 human override); the app only clears to a record once
+  // every active bucket it still appears in has been resolved.
   function approve() {
     var app = state.apps[state.currentApp]; var F = state.currentBucket;
     if (!app || app.status === "rejected" || app.approved[F]) return;
@@ -404,6 +408,8 @@
     }
     updateReviewed(); updateSummary(true); advance();
   }
+  // Reject the whole application on this field, pull it from every bucket, and file
+  // it under Rejected with the "please check" reason codes (FR-12 / FR-13).
   function reject() {
     var app = state.apps[state.currentApp]; var F = state.currentBucket;
     if (!app || app.status === "rejected") return;
@@ -425,14 +431,18 @@
     var top = document.createElement("div"); top.className = "record-row-top";
     var name = document.createElement("span"); name.className = "record-row-name"; name.textContent = app.name || app.filename;
     top.appendChild(name);
+    // Status pill lives in a fixed-width slot, right-aligned, so pills line up in
+    // one column immediately left of the Re-ingest button (same layout for all rows).
+    var pillSlot = document.createElement("span"); pillSlot.className = "record-row-pill";
     if (app.record === "rejected") {
       var rj = app.rejectionInfo || { rejectedField: "", pleaseCheck: [] };
       var badge = document.createElement("span"); badge.className = "badge badge-FAIL"; badge.textContent = "Rejected for: " + bLabel(rj.rejectedField);
-      top.appendChild(badge);
+      pillSlot.appendChild(badge);
     } else {
       var b2 = document.createElement("span"); b2.className = "badge badge-PASS"; b2.textContent = app.recordBadge || "Cleared";
-      top.appendChild(b2);
+      pillSlot.appendChild(b2);
     }
+    top.appendChild(pillSlot);
     var reingest = document.createElement("button");
     reingest.type = "button"; reingest.className = "btn btn--secondary btn-sm reingest-btn";
     reingest.textContent = "Re-ingest";
@@ -565,6 +575,8 @@
   }
 
   // --- Streaming ---
+  // One streamed SSE result (FR-10/11): auto-clear a clean label, otherwise fan its
+  // flagged fields out into the per-field triage buckets (FR-13 reason codes).
   function handleItem(item) {
     state.done += 1;
     var app = state.apps[item.image_filename] || makeApp(item);
@@ -594,14 +606,14 @@
     fetch("/batch", { method: "POST", body: formData })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
-        if (!res.ok) { resultsSec.hidden = true; showError((res.j && res.j.error) || "Couldn't start the batch."); return; }
+        if (!res.ok) { resultsSec.hidden = true; pipelineView.classList.remove("has-results"); showError((res.j && res.j.error) || "Couldn't start the batch."); return; }
         if (res.j.pairing_errors && res.j.pairing_errors.length) {
           showError(res.j.pairing_errors.length + " item(s) couldn't be paired: "
             + res.j.pairing_errors.slice(0, 5).map(function (e) { return e.reference + " (" + e.problem + ")"; }).join(", "));
         }
         startStream(res.j.job_id, res.j.item_count);
       })
-      .catch(function () { resultsSec.hidden = true; showError("Couldn't reach the server."); });
+      .catch(function () { resultsSec.hidden = true; pipelineView.classList.remove("has-results"); showError("Couldn't reach the server."); });
   }
 
   document.getElementById("review-back").addEventListener("click", function () { history.back(); });
