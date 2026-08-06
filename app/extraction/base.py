@@ -3,37 +3,45 @@
 Single responsibility: define the one contract every extractor implements, so
 providers are swappable via config and chainable for failover. The interface
 exposes a single operation — transcribe an image into structured fields — plus
-an ok/confidence flag the router uses to decide accept / fail over / escalate.
+an ``ok`` flag the router/verify layer uses to decide accept vs. NEEDS_REVIEW.
 
-Scaffold pass: interface only. No extraction logic in any implementation.
+Judgment lives elsewhere: an extractor ONLY reads. It never compares against
+expected values and never decides PASS/FAIL.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from pydantic import BaseModel, Field
 
-class ExtractionResult:
+
+class ExtractionResult(BaseModel):
     """What an extractor returns.
 
-    Intended attributes:
-        fields: dict[str, str]  # transcribed label fields (brand, abv, warning, ...)
-        ok: bool                # False if the engine could not read the label
-        confidence: float       # 0..1; low confidence -> router may fail over / NEEDS_REVIEW
-        engine: str             # which provider produced this (for auditing)
+    Attributes:
+        fields: transcribed label fields keyed by the field-registry keys
+            (brand, alcohol_content, warning, class_type, net_contents,
+            producer, country_of_origin). A value is the transcribed string or
+            ``None`` when the field is absent/unreadable — never a guess.
+        ok: False if the engine could not read the label (timeout/error);
+            downstream that maps every field to NEEDS_REVIEW.
+        error: short error string when ``ok`` is False (for logs/harness).
     """
 
-    # Stub only.
+    fields: dict[str, "str | None"] = Field(default_factory=dict)
+    ok: bool
+    error: "str | None" = None
 
 
 class Extractor(ABC):
     """Transcribe a label image into structured fields. Judgment lives elsewhere."""
 
     @abstractmethod
-    def extract(self, image_bytes: bytes) -> "ExtractionResult":
+    def extract(self, image_bytes: bytes) -> ExtractionResult:
         """Transcribe ``image_bytes`` into an :class:`ExtractionResult`.
 
         Implementations MUST NOT compare against expected values — extraction
-        only reads. Stub: no behavior this pass.
+        only reads.
         """
         raise NotImplementedError

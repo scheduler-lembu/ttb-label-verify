@@ -33,8 +33,9 @@ for Linux) for production. In production the cloud-vision call swaps — by
 **config, not by rewrite** — to **Azure OpenAI** or **Azure AI Document
 Intelligence** over a private endpoint, which also clears TTB's outbound-ML-endpoint
 firewall block (Marcus Williams's constraint). The prototype deliberately picks a
-model with an **Azure twin** (the GPT-4o family runs both as a public API and
-inside Azure OpenAI) so prototype → production is a config change.
+model with an **Azure twin** (the GPT-5.6 family — Terra single-label, Luna batch —
+runs both as a public API and inside Azure OpenAI) so prototype → production is a
+config change.
 
 ---
 
@@ -355,7 +356,7 @@ Resilience & cost specifically map to **NFR-05** (graceful degradation),
 
 ```
 # --- Extraction providers (config-selected; no logic this pass) ---
-PRIMARY_MODEL=            # premium cloud vision model for single-label (Azure OpenAI twin, e.g. gpt-4o)
+PRIMARY_MODEL=gpt-5.6-terra   # premium cloud vision model for single-label (Azure OpenAI twin; GPT-5.6 Terra)
 BACKUP_MODEL=             # failover provider/model
 BATCH_MODEL=              # cheap/local engine used for batch (e.g. ocr-local)
 API_KEY=                  # cloud provider key (prototype only; never a real secret in the repo)

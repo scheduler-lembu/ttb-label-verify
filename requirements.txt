@@ -16,3 +16,4 @@ python-dotenv
 pytest
 sse-starlette
 Pillow
+openai
