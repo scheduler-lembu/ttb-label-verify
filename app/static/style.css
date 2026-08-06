@@ -311,3 +311,39 @@ body {
 .record-row-name { font-weight: 700; font-size: 1.05rem; word-break: break-word; }
 .record-row-note { margin-top: 0.4rem; font-size: 0.9rem; color: var(--muted); }
 .record-empty { color: var(--muted); font-style: italic; padding: 0.5rem 0.15rem; }
+
+/* --- Notification bell + panel (#13b) --- */
+.notif-wrap { position: relative; margin-left: 0.5rem; }
+.notif-bell {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 2.4rem; height: 2.4rem; border-radius: var(--radius-pill);
+  background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.25); color: #fff; cursor: pointer;
+}
+.notif-bell:hover { background: rgba(255,255,255,.2); }
+.notif-bell:focus-visible { outline: none; box-shadow: var(--focus); }
+.notif-bell .icon { width: 1.3rem; height: 1.3rem; }
+.notif-count {
+  position: absolute; top: -0.35rem; right: -0.35rem; min-width: 1.25rem; height: 1.25rem;
+  padding: 0 0.3rem; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.75rem; font-weight: 800; color: #fff; background: var(--fail-fg);
+  border-radius: var(--radius-pill); border: 2px solid var(--primary);
+}
+.notif-panel {
+  position: absolute; right: 0; top: calc(100% + 0.5rem); z-index: 20;
+  width: min(360px, 90vw); background: var(--card); color: var(--fg);
+  border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-lg); padding: 0.85rem;
+}
+.notif-panel-title { margin: 0 0 0.6rem; font-size: 0.8rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.notif-list { display: flex; flex-direction: column; gap: 0.55rem; max-height: 60vh; overflow-y: auto; }
+.notif-row {
+  display: flex; align-items: center; gap: 0.6rem; justify-content: space-between;
+  padding: 0.7rem 0.8rem; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.notif-text { font-size: 0.92rem; font-weight: 600; }
+
+/* --- Small button variant + record-row actions (#13b) --- */
+.btn-sm { padding: 0.4rem 0.8rem; font-size: 0.9rem; border-radius: var(--radius-sm); }
+.reingest-btn { flex: none; }
+.reingest-error { display: block; margin-top: 0.4rem; font-size: 0.85rem; font-weight: 700; color: var(--fail-fg); }
+.record-row.highlight { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(29,78,216,.25), var(--shadow); }
+.record-row-top { flex-wrap: wrap; }

@@ -17,6 +17,7 @@
     <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></symbol>
   </svg>
 
   <header class="site-header">
@@ -26,6 +27,16 @@
         <a href="/">Single label</a>
         <a href="/batch" class="active">Batch</a>
       </nav>
+      <div class="notif-wrap">
+        <button type="button" class="notif-bell" id="notif-bell" aria-label="Re-ingest notifications">
+          <svg class="icon"><use href="#i-bell"/></svg>
+          <span class="notif-count" id="notif-count" hidden>0</span>
+        </button>
+        <div class="notif-panel" id="notif-panel" hidden>
+          <p class="notif-panel-title">Re-ingest results</p>
+          <div class="notif-list" id="notif-list"></div>
+        </div>
+      </div>
     </div>
   </header>
 

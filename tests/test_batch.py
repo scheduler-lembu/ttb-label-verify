@@ -71,6 +71,39 @@ def test_post_batch_upload_no_csv_errors():
     assert "CSV" in r.json()["error"]
 
 
+def test_reverify_endpoint_offline(monkeypatch):
+    """POST /batch/{job}/reverify/{filename} runs the single-label path with a
+    MOCKED extractor (no real model) and returns {fields, bucket_tags, clean}."""
+    from app import verify as verify_mod
+    from app.extraction.base import ExtractionResult
+    from app.main import BATCH_JOBS
+
+    # Mock the single-label extractor -> a known read (brand deliberately wrong).
+    def fake_extract(image_bytes):
+        return ExtractionResult(fields={
+            "brand": "A COMPLETELY DIFFERENT BRAND",
+            "alcohol_content": "45%", "warning": None,
+            "class_type": "Kentucky Straight Bourbon Whiskey", "net_contents": "750 mL",
+            "producer": "Old Tom Distillery, Louisville, KY", "country_of_origin": "",
+        }, ok=True)
+    monkeypatch.setattr(verify_mod, "extract_single", fake_extract)
+
+    items, _ = build_demo_items()
+    BATCH_JOBS["reverify-job"] = items
+    fn = items[0].image_filename  # demo_0001 (expected brand "Old Tom Distillery")
+
+    r = client.post(f"/batch/reverify-job/reverify/{fn}")
+    assert r.status_code == 200
+    body = r.json()
+    assert set(["fields", "bucket_tags", "clean"]).issubset(body)
+    assert body["clean"] is False                       # brand mismatch -> not clean
+    assert "brand" in [t["bucket_id"] for t in body["bucket_tags"]]
+
+    # Unknown filename / unknown job -> 404, no crash.
+    assert client.post("/batch/reverify-job/reverify/nope.png").status_code == 404
+    assert client.post(f"/batch/no-such-job/reverify/{fn}").status_code == 404
+
+
 def test_run_batch_stream_dedups_identical_images(monkeypatch):
     """Two batch items with the SAME image bytes extract exactly ONCE (shared cache).
 

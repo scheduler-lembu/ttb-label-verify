@@ -11,8 +11,12 @@
 > bucket. **(2) A combined "Approved / Cleared" record bucket** holds decided applications — auto-cleared
 > on ingest and agent-approved — and **(3) a "Rejected" record bucket** holds rejects with their rollup.
 > Each record bucket opens a SEARCHABLE LIST (instant, case-insensitive over any field value), not the
-> review screen, and carries no Approve/Reject. All disposition is session-only, in memory, no persistence
-> (D-8 / CON-02). Next (#13b): a "Re-ingest" action + a navigable notification bell.
+> review screen. Every record row now has a **Re-ingest** action: a fresh single-label AI re-read that
+> clears the app's prior disposition and re-buckets it (clean → Approved/Cleared; flagged → the relevant
+> field-error buckets). Each re-ingest posts a result to a header **notification bell** whose **Navigate**
+> button walks the agent through the app's *current* buckets — recomputed on each click — opening each for
+> review and finally landing on its terminal record bucket once it settles. All state is session-only, in
+> memory, no persistence (D-8 / CON-02). **The triage/record feature is now complete; deploy is next.**
 
 ---
 
@@ -53,9 +57,13 @@ The target workflow:
 7. **Decided applications land in record buckets.** Beneath the field-error buckets sit two
    record buckets: a combined **Approved / Cleared** (auto-cleared on ingest + agent-approved)
    and **Rejected** (carrying the reject rollup). Each opens a **searchable list** — instant,
-   case-insensitive over any field value — rather than the review screen, and has no
-   Approve/Reject. This is where an agent finds a decided application after the fact and is
-   the foundation for the coming **Re-ingest** action and notification bell (#13b).
+   case-insensitive over any field value — rather than the review screen.
+8. **Re-ingest + a navigable notification.** Every record row has a **Re-ingest** button that
+   re-runs that one label through the accurate single-label engine; the fresh result clears the
+   app's prior disposition and re-buckets it (clean → Approved/Cleared; flagged → the field-error
+   buckets). Each re-ingest posts a compact result to a header **bell**, and its **Navigate**
+   button cycles the agent through the app's live buckets — recomputed each click as they work —
+   until it settles in Approved/Cleared or Rejected. Everything is session-only (no persistence).
 
 ## 2. The single-label view is retained, not retired
 

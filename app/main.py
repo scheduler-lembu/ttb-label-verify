@@ -15,6 +15,7 @@ is the HTTP + presentation surface and must never crash on a bad upload (NFR-06)
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import uuid
@@ -29,6 +30,7 @@ from app.batch import (
     build_demo_items,
     build_uploaded_items,
     image_bytes_for,
+    item_for,
     run_batch_stream,
 )
 from app.config import get_settings
@@ -268,6 +270,34 @@ async def batch_image(job_id: str, image_filename: str):
     if data is None:
         return JSONResponse({"error": "Image not found in this batch."}, status_code=404)
     return Response(content=data, media_type=_sniff_image_mime(data))
+
+
+@app.post("/batch/{job_id}/reverify/{image_filename}")
+async def batch_reverify(job_id: str, image_filename: str):
+    """Re-run ONE label through the accurate single-label engine, fresh.
+
+    Returns the SAME shape as an SSE item ({image_filename, name, fields,
+    bucket_tags, clean}) so the client can clear the app's prior disposition and
+    re-bucket it. This is a live single-label model call (one label); the
+    account-level spend cap is the cost guard. Safe lookup only — unknown
+    job/filename → 404.
+    """
+    items = BATCH_JOBS.get(job_id)
+    if items is None:
+        return JSONResponse({"error": "Unknown or expired batch."}, status_code=404)
+    item = item_for(items, image_filename)
+    if item is None:
+        return JSONResponse({"error": "Label not found in this batch."}, status_code=404)
+
+    # verify_label is a blocking (model) call — run it off the event loop.
+    result = await asyncio.to_thread(verify_label, item.image_bytes, item.expected)
+    return JSONResponse({
+        "image_filename": item.image_filename,
+        "name": item.name,
+        "fields": _build_rows(result),
+        "bucket_tags": [t.model_dump() for t in bucket_tags_for(result)],
+        "clean": is_clean(result),
+    })
 
 
 @app.get("/batch/{job_id}/stream")

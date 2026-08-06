@@ -1,12 +1,15 @@
 "use strict";
 
 /*
- * Batch triage — field-error buckets (per field, one-at-a-time review) PLUS two
- * "record" buckets that hold decided applications:
- *   - Approved / Cleared (combined): auto-cleared items + agent-approved applications.
- *   - Rejected: whole-application rejects, carrying the "Rejected for / Please check" rollup.
- * Field-error buckets open the #12 review screen (Approve per-field / Reject whole-app).
- * Record buckets open a SEARCHABLE LIST (no approve/reject). Session-only, no persistence.
+ * Batch triage — field-error buckets (#12 one-at-a-time review), record buckets
+ * (#13a Approved/Cleared + Rejected, searchable) and (#13b) Re-ingest + a
+ * navigable notification bell:
+ *   - Re-ingest re-runs ONE label through the accurate single-label engine; the
+ *     fresh result clears the app's prior disposition and re-buckets it.
+ *   - Each re-ingest posts a notification to the header bell; its Navigate button
+ *     walks the agent through the app's CURRENT buckets until it settles in a
+ *     record bucket.
+ * Session-only, in memory; a reload clears everything.
  */
 (function () {
   var demoBtn = document.getElementById("demo-button");
@@ -22,7 +25,6 @@
   var recordBucketsEl = document.getElementById("record-buckets");
 
   var reviewScreen = document.getElementById("review-screen");
-  var reviewBack = document.getElementById("review-back");
   var reviewProgress = document.getElementById("review-progress");
   var reviewBanner = document.getElementById("review-banner");
   var reviewImg = document.getElementById("review-img");
@@ -39,13 +41,17 @@
   var listSearch = document.getElementById("list-search");
   var recordListEl = document.getElementById("record-list");
 
+  var notifBell = document.getElementById("notif-bell");
+  var notifCount = document.getElementById("notif-count");
+  var notifPanel = document.getElementById("notif-panel");
+  var notifListEl = document.getElementById("notif-list");
+
   var BUCKET_LABELS = {
     brand: "Brand name", alcohol_content: "Alcohol content", warning: "Government warning",
     class_type: "Class / type", net_contents: "Net contents",
     producer: "Producer name & address", country_of_origin: "Country of origin",
     unreadable_label: "Couldn't read the label",
   };
-
   var BANNERS = {
     brand: "Check the brand name — does the label match the application?",
     alcohol_content: "Check the alcohol content (ABV / proof) against the application.",
@@ -62,19 +68,27 @@
 
   function showError(msg) { errorBox.textContent = msg; errorBox.hidden = false; }
   function clearError() { errorBox.hidden = true; errorBox.textContent = ""; }
+  function bLabel(id) { return BUCKET_LABELS[id] || id; }
+  function esc(v) { return (v === null || v === undefined || v === "") ? "—" : String(v); }
+
+  function buildSearch(name, filename, fields) {
+    var parts = [name || "", filename || ""];
+    (fields || []).forEach(function (row) {
+      parts.push(row.label || ""); parts.push(row.extracted || ""); parts.push(row.expected || "");
+    });
+    return parts.join("  ").toLowerCase();
+  }
 
   function reset() {
     clearError();
     bucketsEl.innerHTML = "";
     recordBucketsEl.innerHTML = "";
     recordListEl.innerHTML = "";
-    reviewScreen.hidden = true;
-    listScreen.hidden = true;
-    bucketsEl.hidden = false;
-    recordsSection.hidden = false;
-    doneEl.hidden = true;
-    reviewedEl.hidden = true;
-    flashEl.hidden = true;
+    notifListEl.innerHTML = "";
+    reviewScreen.hidden = true; listScreen.hidden = true;
+    bucketsEl.hidden = false; recordsSection.hidden = false;
+    doneEl.hidden = true; reviewedEl.hidden = true; flashEl.hidden = true;
+    notifPanel.hidden = true;
     state = {
       jobId: null, total: 0, done: 0, clearedAuto: 0,
       attention: 0, flaggedTotal: 0,
@@ -83,146 +97,121 @@
       records: { cleared: [], rejected: [] },
       currentBucket: null, currentApp: null, reviewIndex: 0, reviewTotal: 0,
       currentList: null,
+      notifications: [], notifUnread: 0,
     };
     recordCards.cleared = makeRecordCard("cleared", "Approved / Cleared", "i-check");
     recordCards.rejected = makeRecordCard("rejected", "Rejected", "i-x");
+    updateBell();
     resultsSec.hidden = false;
     summaryEl.textContent = "Starting…";
   }
-
-  function bLabel(id) { return BUCKET_LABELS[id] || id; }
-  function esc(v) { return (v === null || v === undefined || v === "") ? "—" : String(v); }
 
   function updateSummary(done) {
     var lead = done ? "Done" : (state.done + " of " + state.total + " checked");
     summaryEl.textContent = lead + "  —  ✓ " + state.clearedAuto
       + " cleared automatically   ▲ " + state.attention + " need your attention";
   }
-
   function updateReviewed() {
     if (state.reviewedCleared + state.rejected > 0) {
       reviewedEl.hidden = false;
-      reviewedEl.textContent = "Reviewed by you: " + state.reviewedCleared
-        + " cleared · " + state.rejected + " rejected";
-    } else {
-      reviewedEl.hidden = true;
-    }
+      reviewedEl.textContent = "Reviewed by you: " + state.reviewedCleared + " cleared · " + state.rejected + " rejected";
+    } else { reviewedEl.hidden = true; }
   }
-
   function flash(msg) { flashEl.hidden = false; flashEl.textContent = msg; }
   function clearFlash() { flashEl.hidden = true; flashEl.textContent = ""; }
 
-  // --- View visibility ---
   function showOverview() {
     clearFlash();
-    reviewScreen.hidden = true;
-    listScreen.hidden = true;
-    bucketsEl.hidden = false;
-    recordsSection.hidden = false;
-    checkCompletion();   // may replace the field-error buckets with the done banner
+    reviewScreen.hidden = true; listScreen.hidden = true;
+    bucketsEl.hidden = false; recordsSection.hidden = false;
+    checkCompletion();
   }
-
   function checkCompletion() {
     if (state.flaggedTotal > 0 && state.attention === 0) {
-      reviewScreen.hidden = true;
-      listScreen.hidden = true;
-      bucketsEl.hidden = true;
-      recordsSection.hidden = false;   // records stay browsable
-      var txt = "All caught up — reviewed " + state.flaggedTotal + " application(s): "
-        + state.reviewedCleared + " cleared by you, " + state.rejected + " rejected.";
+      reviewScreen.hidden = true; listScreen.hidden = true;
+      bucketsEl.hidden = true; recordsSection.hidden = false;
       doneEl.hidden = false;
-      doneEl.textContent = txt;
+      doneEl.textContent = "All caught up — reviewed " + state.flaggedTotal + " application(s): "
+        + state.reviewedCleared + " cleared by you, " + state.rejected + " rejected.";
     }
   }
 
-  // --- Field-error buckets (unchanged from #12) ---
+  // --- Field-error buckets ---
   function ensureBucket(tag) {
     var b = state.buckets[tag.bucket_id];
     if (b) return b;
     var card = document.createElement("button");
-    card.type = "button";
-    card.className = "bucket-card";
+    card.type = "button"; card.className = "bucket-card";
     var icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     icon.setAttribute("class", "icon");
     icon.innerHTML = '<use href="#' + (tag.bucket_id === "unreadable_label" ? "i-warn" : "i-bucket") + '"/>';
-    var name = document.createElement("span");
-    name.className = "bucket-name"; name.textContent = bLabel(tag.bucket_id);
-    var count = document.createElement("span");
-    count.className = "bucket-count"; count.textContent = "0";
+    var name = document.createElement("span"); name.className = "bucket-name"; name.textContent = bLabel(tag.bucket_id);
+    var count = document.createElement("span"); count.className = "bucket-count"; count.textContent = "0";
     card.appendChild(icon); card.appendChild(name); card.appendChild(count);
     card.addEventListener("click", function () { openBucket(tag.bucket_id); });
     bucketsEl.appendChild(card);
     b = { id: tag.bucket_id, appIds: [], card: card, countEl: count };
-    state.buckets[tag.bucket_id] = b;
-    state.bucketOrder.push(tag.bucket_id);
+    state.buckets[tag.bucket_id] = b; state.bucketOrder.push(tag.bucket_id);
     return b;
   }
-
-  function setBucketCount(b) {
-    b.countEl.textContent = String(b.appIds.length);
-    b.card.hidden = b.appIds.length === 0;
-  }
-
+  function setBucketCount(b) { b.countEl.textContent = String(b.appIds.length); b.card.hidden = b.appIds.length === 0; }
   function removeAppFromBucket(app, bucketId) {
-    var b = state.buckets[bucketId];
-    if (!b) return;
-    var idx = b.appIds.indexOf(app.filename);
-    if (idx !== -1) b.appIds.splice(idx, 1);
-    app.active.delete(bucketId);
-    setBucketCount(b);
+    var b = state.buckets[bucketId]; if (!b) return;
+    var idx = b.appIds.indexOf(app.filename); if (idx !== -1) b.appIds.splice(idx, 1);
+    app.active.delete(bucketId); setBucketCount(b);
   }
-
   function tagFor(app, field) {
     for (var i = 0; i < app.tags.length; i++) { if (app.tags[i].bucket_id === field) return app.tags[i]; }
     return null;
   }
+  function addToFieldBuckets(app) {
+    app.tags.forEach(function (tag) {
+      var b = ensureBucket(tag);
+      if (b.appIds.indexOf(app.filename) === -1) { b.appIds.push(app.filename); app.active.add(tag.bucket_id); setBucketCount(b); }
+    });
+  }
 
-  // --- Record buckets (Approved/Cleared + Rejected) ---
+  // --- Record buckets ---
   function makeRecordCard(type, label, iconId) {
     var card = document.createElement("button");
-    card.type = "button";
-    card.className = "bucket-card record-card record-" + type;
+    card.type = "button"; card.className = "bucket-card record-card record-" + type;
     var icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    icon.setAttribute("class", "icon");
-    icon.innerHTML = '<use href="#' + iconId + '"/>';
-    var name = document.createElement("span");
-    name.className = "bucket-name"; name.textContent = label;
-    var count = document.createElement("span");
-    count.className = "bucket-count"; count.textContent = "0";
+    icon.setAttribute("class", "icon"); icon.innerHTML = '<use href="#' + iconId + '"/>';
+    var name = document.createElement("span"); name.className = "bucket-name"; name.textContent = label;
+    var count = document.createElement("span"); count.className = "bucket-count"; count.textContent = "0";
     card.appendChild(icon); card.appendChild(name); card.appendChild(count);
     card.addEventListener("click", function () { openList(type); });
     recordBucketsEl.appendChild(card);
     return { countEl: count };
   }
-
   function updateRecordCounts() {
     recordCards.cleared.countEl.textContent = String(state.records.cleared.length);
     recordCards.rejected.countEl.textContent = String(state.records.rejected.length);
   }
-
   function routeToRecord(app, type, badge) {
-    app.record = type;
-    if (badge) app.recordBadge = badge;
+    app.record = type; if (badge) app.recordBadge = badge;
     state.records[type].unshift(app.filename);   // most-recently-touched first
     updateRecordCounts();
+  }
+  function removeFromRecord(app) {
+    if (!app.record) return;
+    var arr = state.records[app.record]; var i = arr.indexOf(app.filename);
+    if (i !== -1) arr.splice(i, 1);
+    app.record = null; app.recordBadge = null; updateRecordCounts();
   }
 
   function makeApp(item) {
     var tags = item.bucket_tags || [];
-    var parts = [item.name || "", item.image_filename || ""];
-    (item.fields || []).forEach(function (row) {
-      parts.push(row.label || ""); parts.push(row.extracted || ""); parts.push(row.expected || "");
-    });
     return {
       filename: item.image_filename, name: item.name, item: item, tags: tags,
       flaggedFields: tags.map(function (t) { return t.bucket_id; }),
       active: new Set(), approved: {}, status: "pending", rejectionInfo: null,
       record: null, recordBadge: null,
-      searchText: parts.join("  ").toLowerCase(),
+      searchText: buildSearch(item.name, item.image_filename, item.fields),
     };
   }
 
-  // --- Review screen (unchanged from #12) ---
+  // --- Review screen ---
   function whyText(tag) {
     var x = esc(tag.extracted), e = esc(tag.expected);
     switch (tag.reason) {
@@ -238,7 +227,6 @@
       default: return tag.note || "This field needs a review.";
     }
   }
-
   function renderFullDetails(app) {
     reviewFullTbody.innerHTML = "";
     (app.item.fields || []).forEach(function (row) {
@@ -247,155 +235,212 @@
       var xx = document.createElement("td"); xx.className = "cell-val"; xx.textContent = row.extracted;
       var ee = document.createElement("td"); ee.className = "cell-val"; ee.textContent = row.expected;
       var rr = document.createElement("td"); rr.className = "cell-result";
-      var badge = document.createElement("span");
-      badge.className = "badge badge-" + row.verdict; badge.textContent = row.verdict_label;
+      var badge = document.createElement("span"); badge.className = "badge badge-" + row.verdict; badge.textContent = row.verdict_label;
       rr.appendChild(badge);
       if (row.reason) { var d = document.createElement("div"); d.className = "reason"; d.textContent = row.reason; rr.appendChild(d); }
       tr.appendChild(f); tr.appendChild(xx); tr.appendChild(ee); tr.appendChild(rr);
       reviewFullTbody.appendChild(tr);
     });
   }
-
   function renderReview(appId, bucketId) {
-    var app = state.apps[appId];
-    var tag = tagFor(app, bucketId);
+    var app = state.apps[appId]; var tag = tagFor(app, bucketId);
     state.currentApp = appId;
     reviewProgress.textContent = "Label " + state.reviewIndex + " of " + state.reviewTotal + " in this bucket";
     reviewBanner.textContent = BANNERS[bucketId] || ("Check the " + bLabel(bucketId) + " against the application.");
     reviewImg.src = "/batch/" + state.jobId + "/image/" + encodeURIComponent(app.filename);
     reviewImg.alt = "Submitted label: " + app.name;
-
     if (bucketId === "warning") reviewAppLabel.textContent = "Official Government Warning (must match exactly)";
     else if (bucketId === "unreadable_label") reviewAppLabel.textContent = "The tool couldn't read the label";
     else reviewAppLabel.textContent = "What the application says";
-
     reviewAppValue.textContent = (tag && tag.expected) ? tag.expected
       : (bucketId === "unreadable_label" ? "Review the image and decide." : "— (blank) —");
     reviewWhy.textContent = tag ? whyText(tag) : "";
-
     renderFullDetails(app);
-    bucketsEl.hidden = true;
-    recordsSection.hidden = true;
-    listScreen.hidden = true;
-    doneEl.hidden = true;
+    bucketsEl.hidden = true; recordsSection.hidden = true; listScreen.hidden = true; doneEl.hidden = true;
     reviewScreen.hidden = false;
   }
-
-  function openBucket(bucketId) {
+  // openBucket can start on a specific app (Navigate) or at the first (normal).
+  function openBucket(bucketId, startFilename) {
     var b = state.buckets[bucketId];
     if (!b || b.appIds.length === 0) return;
     clearFlash();
-    state.currentBucket = bucketId;
-    state.reviewTotal = b.appIds.length;
-    state.reviewIndex = 1;
-    renderReview(b.appIds[0], bucketId);
+    state.currentBucket = bucketId; state.reviewTotal = b.appIds.length;
+    var idx = startFilename ? b.appIds.indexOf(startFilename) : 0;
+    if (idx < 0) idx = 0;
+    state.reviewIndex = idx + 1;
+    renderReview(b.appIds[idx], bucketId);
   }
-
   function advance() {
     var b = state.buckets[state.currentBucket];
-    if (b && b.appIds.length > 0) {
-      state.reviewIndex += 1;
-      renderReview(b.appIds[0], state.currentBucket);
-    } else {
-      showOverview();
-      flash("This bucket is clear.");
-    }
+    if (b && b.appIds.length > 0) { state.reviewIndex += 1; renderReview(b.appIds[0], state.currentBucket); }
+    else { showOverview(); flash("This bucket is clear."); }
   }
-
   function approve() {
-    var app = state.apps[state.currentApp];
-    var F = state.currentBucket;
+    var app = state.apps[state.currentApp]; var F = state.currentBucket;
     if (!app || app.status === "rejected" || app.approved[F]) return;
-    app.approved[F] = true;
-    removeAppFromBucket(app, F);              // leaves THIS bucket only
-    if (app.active.size === 0) {              // every flagged field approved -> fully cleared
-      state.reviewedCleared += 1;
-      state.attention -= 1;
-      app.status = "approved";
+    app.approved[F] = true; removeAppFromBucket(app, F);
+    if (app.active.size === 0) {
+      state.reviewedCleared += 1; state.attention -= 1; app.status = "approved";
       routeToRecord(app, "cleared", "Approved by you");
     }
-    updateReviewed(); updateSummary(true);
-    advance();
+    updateReviewed(); updateSummary(true); advance();
   }
-
   function reject() {
-    var app = state.apps[state.currentApp];
-    var F = state.currentBucket;
+    var app = state.apps[state.currentApp]; var F = state.currentBucket;
     if (!app || app.status === "rejected") return;
     app.status = "rejected";
-    var pleaseCheck = app.flaggedFields.map(function (f) {
-      var t = tagFor(app, f); return { field: f, reason: t ? t.reason : "" };
-    });
+    var pleaseCheck = app.flaggedFields.map(function (f) { var t = tagFor(app, f); return { field: f, reason: t ? t.reason : "" }; });
     app.rejectionInfo = { rejectedField: F, reason: (tagFor(app, F) || {}).reason, pleaseCheck: pleaseCheck };
-    Array.from(app.active).forEach(function (b) { removeAppFromBucket(app, b); });  // leaves ALL buckets
-    state.attention -= 1;
-    state.rejected += 1;
+    Array.from(app.active).forEach(function (b) { removeAppFromBucket(app, b); });
+    state.attention -= 1; state.rejected += 1;
     state.rejectedApps.push({ name: app.name, pleaseCheck: pleaseCheck });
     routeToRecord(app, "rejected", "Rejected");
-    flash("Rejected for: " + bLabel(F) + ". Please check: "
-      + pleaseCheck.map(function (p) { return bLabel(p.field); }).join(", ") + ".");
-    updateReviewed(); updateSummary(true);
-    advance();
+    flash("Rejected for: " + bLabel(F) + ". Please check: " + pleaseCheck.map(function (p) { return bLabel(p.field); }).join(", ") + ".");
+    updateReviewed(); updateSummary(true); advance();
   }
 
-  // --- Record list view (searchable; no approve/reject) ---
-  function makeListRow(app) {
+  // --- Record list view (searchable; Re-ingest per row) ---
+  function makeListRow(app, highlight) {
     var row = document.createElement("div");
-    row.className = "record-row";
+    row.className = "record-row" + (app.filename === highlight ? " highlight" : "");
     var top = document.createElement("div"); top.className = "record-row-top";
-    var name = document.createElement("span");
-    name.className = "record-row-name"; name.textContent = app.name || app.filename;
+    var name = document.createElement("span"); name.className = "record-row-name"; name.textContent = app.name || app.filename;
     top.appendChild(name);
     if (app.record === "rejected") {
       var rj = app.rejectionInfo || { rejectedField: "", pleaseCheck: [] };
-      var badge = document.createElement("span");
-      badge.className = "badge badge-FAIL"; badge.textContent = "Rejected for: " + bLabel(rj.rejectedField);
+      var badge = document.createElement("span"); badge.className = "badge badge-FAIL"; badge.textContent = "Rejected for: " + bLabel(rj.rejectedField);
       top.appendChild(badge);
-      row.appendChild(top);
-      var note = document.createElement("div");
-      note.className = "record-row-note";
-      note.textContent = "Please check: " + rj.pleaseCheck.map(function (p) { return bLabel(p.field); }).join(", ");
-      row.appendChild(note);
     } else {
-      var b2 = document.createElement("span");
-      b2.className = "badge badge-PASS"; b2.textContent = app.recordBadge || "Cleared";
+      var b2 = document.createElement("span"); b2.className = "badge badge-PASS"; b2.textContent = app.recordBadge || "Cleared";
       top.appendChild(b2);
-      row.appendChild(top);
+    }
+    var reingest = document.createElement("button");
+    reingest.type = "button"; reingest.className = "btn btn--secondary btn-sm reingest-btn";
+    reingest.textContent = "Re-ingest";
+    reingest.addEventListener("click", function () { reverify(app, reingest); });
+    top.appendChild(reingest);
+    row.appendChild(top);
+    if (app.record === "rejected") {
+      var note = document.createElement("div"); note.className = "record-row-note";
+      note.textContent = "Please check: " + (app.rejectionInfo.pleaseCheck || []).map(function (p) { return bLabel(p.field); }).join(", ");
+      row.appendChild(note);
     }
     return row;
   }
-
-  function renderList(type, query) {
+  function renderList(type, query, highlight) {
     recordListEl.innerHTML = "";
     var q = (query || "").trim().toLowerCase();
-    var ids = state.records[type];
-    var shown = 0;
+    var ids = state.records[type]; var shown = 0;
     ids.forEach(function (id) {
-      var app = state.apps[id];
-      if (!app) return;
+      var app = state.apps[id]; if (!app) return;
       if (q && app.searchText.indexOf(q) === -1) return;
-      recordListEl.appendChild(makeListRow(app));
-      shown += 1;
+      recordListEl.appendChild(makeListRow(app, highlight)); shown += 1;
     });
     if (shown === 0) {
-      var empty = document.createElement("p");
-      empty.className = "record-empty";
+      var empty = document.createElement("p"); empty.className = "record-empty";
       empty.textContent = ids.length === 0 ? "Nothing here yet." : "No matches for “" + query + "”.";
       recordListEl.appendChild(empty);
     }
   }
-
-  function openList(type) {
+  function openList(type, highlight) {
     clearFlash();
     state.currentList = type;
     listTitle.textContent = type === "cleared" ? "Approved / Cleared" : "Rejected";
     listSearch.value = "";
-    renderList(type, "");
-    bucketsEl.hidden = true;
-    recordsSection.hidden = true;
-    reviewScreen.hidden = true;
-    doneEl.hidden = true;
+    renderList(type, "", highlight);
+    bucketsEl.hidden = true; recordsSection.hidden = true; reviewScreen.hidden = true; doneEl.hidden = true;
     listScreen.hidden = false;
+  }
+
+  // --- Re-ingest (fresh single-label read) ---
+  function reverify(app, btn) {
+    var original = btn.textContent;
+    btn.disabled = true; btn.textContent = "Re-checking…";
+    fetch("/batch/" + state.jobId + "/reverify/" + encodeURIComponent(app.filename), { method: "POST" })
+      .then(function (r) { if (!r.ok) throw new Error("bad"); return r.json(); })
+      .then(function (resp) { applyReingest(app, resp); })
+      .catch(function () {
+        btn.disabled = false; btn.textContent = original;
+        var msg = btn.parentNode.querySelector(".reingest-error");
+        if (!msg) { msg = document.createElement("span"); msg.className = "reingest-error"; btn.parentNode.appendChild(msg); }
+        msg.textContent = "couldn't re-check — try again";
+      });
+  }
+  function applyReingest(app, resp) {
+    removeFromRecord(app);                                  // clear its record-bucket membership
+    Array.from(app.active).forEach(function (b) { removeAppFromBucket(app, b); });
+    app.active = new Set(); app.approved = {}; app.rejectionInfo = null; app.status = "pending";
+    app.item.fields = resp.fields || [];
+    app.tags = resp.bucket_tags || [];
+    app.flaggedFields = app.tags.map(function (t) { return t.bucket_id; });
+    app.searchText = buildSearch(app.name, app.filename, app.item.fields);
+
+    if (resp.clean || !app.tags.length) {
+      app.status = "clean";
+      routeToRecord(app, "cleared", "Auto-cleared");
+    } else {
+      addToFieldBuckets(app);
+      state.attention += 1; state.flaggedTotal += 1;
+      doneEl.hidden = true;
+    }
+    updateRecordCounts(); updateSummary(true); updateReviewed();
+    postNotification(app, resp);
+    if (!listScreen.hidden && state.currentList) renderList(state.currentList, listSearch.value);
+    checkCompletion();
+  }
+
+  // --- Notifications + bell ---
+  function updateBell() {
+    if (state.notifUnread > 0) { notifCount.hidden = false; notifCount.textContent = String(state.notifUnread); }
+    else { notifCount.hidden = true; }
+  }
+  function postNotification(app, resp) {
+    var brand = app.name || app.filename; var text;
+    if (resp.clean || !app.tags.length) text = brand + " — re-checked: cleared.";
+    else if (app.tags.length === 1) text = brand + " — re-checked: needs review on " + bLabel(app.tags[0].bucket_id) + ".";
+    else text = brand + " — re-checked: needs review on " + app.tags.length + " fields.";
+    state.notifications.unshift({ filename: app.filename, text: text, cycleVisited: new Set() });
+    state.notifUnread += 1; updateBell();
+    if (!notifPanel.hidden) renderNotifPanel();
+  }
+  function renderNotifPanel() {
+    notifListEl.innerHTML = "";
+    if (!state.notifications.length) {
+      var empty = document.createElement("p"); empty.className = "record-empty"; empty.textContent = "No re-ingest results yet.";
+      notifListEl.appendChild(empty); return;
+    }
+    state.notifications.forEach(function (n) {
+      var row = document.createElement("div"); row.className = "notif-row";
+      var txt = document.createElement("span"); txt.className = "notif-text"; txt.textContent = n.text;
+      var nav = document.createElement("button"); nav.type = "button"; nav.className = "btn btn--primary btn-sm";
+      nav.textContent = "Navigate";
+      nav.addEventListener("click", function () { navigate(n); });
+      row.appendChild(txt); row.appendChild(nav);
+      notifListEl.appendChild(row);
+    });
+  }
+  function toggleNotifPanel() {
+    if (notifPanel.hidden) {
+      state.notifUnread = 0; updateBell();
+      renderNotifPanel(); notifPanel.hidden = false;
+    } else { notifPanel.hidden = true; }
+  }
+  function closeNotifPanel() { notifPanel.hidden = true; }
+
+  // Navigate cycling: recompute the app's CURRENT buckets on each click.
+  function navigate(notif) {
+    var app = state.apps[notif.filename]; if (!app) return;
+    var current = Array.from(app.active);
+    if (current.length) {
+      var next = current.filter(function (b) { return !notif.cycleVisited.has(b); });
+      if (!next.length) { notif.cycleVisited.clear(); next = current; }
+      var target = next[0]; notif.cycleVisited.add(target);
+      closeNotifPanel();
+      openBucket(target, app.filename);   // open that bucket ON this app
+    } else if (app.record) {
+      closeNotifPanel();
+      openList(app.record, app.filename);  // settled -> terminal record bucket, highlighted
+    }
   }
 
   // --- Streaming ---
@@ -404,34 +449,18 @@
     var app = state.apps[item.image_filename] || makeApp(item);
     var isNew = !state.apps[item.image_filename];
     if (isNew) state.apps[item.image_filename] = app;
-
     if (item.clean || !(item.bucket_tags || []).length) {
-      // Clean (or nothing flagged) -> lands in the Approved/Cleared record bucket.
-      if (isNew && item.clean) {
-        state.clearedAuto += 1;
-        app.status = "clean";
-        routeToRecord(app, "cleared", "Auto-cleared");
-      }
-      updateSummary(false);
-      return;
+      if (isNew && item.clean) { state.clearedAuto += 1; app.status = "clean"; routeToRecord(app, "cleared", "Auto-cleared"); }
+      updateSummary(false); return;
     }
-
     if (isNew) { state.attention += 1; state.flaggedTotal += 1; }
-    app.tags.forEach(function (tag) {
-      var b = ensureBucket(tag);
-      if (b.appIds.indexOf(app.filename) === -1) { b.appIds.push(app.filename); app.active.add(tag.bucket_id); setBucketCount(b); }
-    });
-    doneEl.hidden = true;
-    updateSummary(false);
+    addToFieldBuckets(app);
+    doneEl.hidden = true; updateSummary(false);
   }
-
   function finalSummary(s) {
-    state.clearedAuto = s.pass;
-    state.total = s.total; state.done = s.total;
-    updateSummary(true);
-    checkCompletion();
+    state.clearedAuto = s.pass; state.total = s.total; state.done = s.total;
+    updateSummary(true); checkCompletion();
   }
-
   function startStream(jobId, itemCount) {
     state.jobId = jobId; state.total = itemCount;
     var es = new EventSource("/batch/" + jobId + "/stream");
@@ -439,7 +468,6 @@
     es.addEventListener("summary", function (ev) { finalSummary(JSON.parse(ev.data)); es.close(); });
     es.onerror = function () { es.close(); };
   }
-
   function submitBatch(formData) {
     reset();
     fetch("/batch", { method: "POST", body: formData })
@@ -455,16 +483,15 @@
       .catch(function () { resultsSec.hidden = true; showError("Couldn't reach the server."); });
   }
 
-  if (reviewBack) reviewBack.addEventListener("click", showOverview);
+  document.getElementById("review-back").addEventListener("click", showOverview);
   if (approveBtn) approveBtn.addEventListener("click", approve);
   if (rejectBtn) rejectBtn.addEventListener("click", reject);
   if (listBack) listBack.addEventListener("click", showOverview);
   if (listSearch) listSearch.addEventListener("input", function () { renderList(state.currentList, this.value); });
+  if (notifBell) notifBell.addEventListener("click", toggleNotifPanel);
 
   if (demoBtn) {
-    demoBtn.addEventListener("click", function () {
-      var fd = new FormData(); fd.append("mode", "demo"); submitBatch(fd);
-    });
+    demoBtn.addEventListener("click", function () { var fd = new FormData(); fd.append("mode", "demo"); submitBatch(fd); });
   }
   if (uploadForm) {
     uploadForm.addEventListener("submit", function (e) {
