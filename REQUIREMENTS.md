@@ -114,6 +114,10 @@ layout/typography analysis and are therefore isolated as **Could** — see §12.
 | NFR-05 | S | **Graceful degradation:** on imperfect images (glare, angle, lighting) the system either reads them or clearly flags for a better image — it never crashes. | Test | R18, R25 |
 | NFR-06 | M | **Robust input handling:** malformed or unsupported uploads produce a clear message, not an error or crash. | Test | R18, R32 |
 
+**Note on NFR-05:** A pre-extraction image quality gate (Laplacian-variance blur +
+std-dev blank check) routes unreadable uploads to NEEDS_REVIEW ("request a better
+image") before an API call is made, saving cost and matching current agent practice.
+
 ---
 
 ## 7. Constraints (C)

@@ -16,4 +16,6 @@ python-dotenv
 pytest
 sse-starlette
 Pillow
+opencv-python-headless
+numpy
 openai

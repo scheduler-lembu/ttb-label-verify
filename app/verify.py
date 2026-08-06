@@ -13,16 +13,26 @@ serial cross-provider retry (that would violate the 5-second bar), never a crash
 
 from __future__ import annotations
 
+from app.config import get_settings
 from app.extraction.router import extract_single
 from app.fields import FIELD_REGISTRY
 from app.matching.rules import run_matchers
 from app.models import FieldResult, LabelResult, ResultReason, ResultState
+from app.quality_gate import check_quality
 
 _UNAVAILABLE_NOTE = "extractor unavailable — needs human review"
 
 
-def _all_needs_review(expected: dict) -> LabelResult:
-    """Every registry field → NEEDS_REVIEW / UNREADABLE (graceful degradation)."""
+def _all_needs_review(
+    expected: dict,
+    note: str = _UNAVAILABLE_NOTE,
+    reason: ResultReason = ResultReason.UNREADABLE,
+) -> LabelResult:
+    """Every registry field → NEEDS_REVIEW (graceful degradation).
+
+    ``note``/``reason`` default to the extractor-unavailable case so existing
+    behavior is unchanged; the quality gate passes its own note.
+    """
     fields = [
         FieldResult(
             field=field_def.key,
@@ -30,8 +40,8 @@ def _all_needs_review(expected: dict) -> LabelResult:
             extracted=None,
             rule="extraction unavailable",
             verdict=ResultState.NEEDS_REVIEW,
-            reason=ResultReason.UNREADABLE,
-            note=_UNAVAILABLE_NOTE,
+            reason=reason,
+            note=note,
         )
         for field_def in FIELD_REGISTRY
     ]
@@ -47,9 +57,25 @@ def verify_label(image_bytes: bytes, expected: dict) -> LabelResult:
 
     Returns:
         A ``LabelResult`` with a ``FieldResult`` per registry field. If the
-        extractor is unavailable, every field is NEEDS_REVIEW and overall rolls
-        up to NEEDS_REVIEW — the app degrades gracefully rather than crashing.
+        image fails the quality gate or the extractor is unavailable, every
+        field is NEEDS_REVIEW and overall rolls up to NEEDS_REVIEW — the app
+        degrades gracefully rather than crashing.
     """
+    # STAGE 1: image quality gate — reject unreadable uploads BEFORE any API call.
+    settings = get_settings()
+    if settings.QUALITY_GATE_ENABLED:
+        q = check_quality(
+            image_bytes,
+            blur_threshold=settings.QUALITY_BLUR_THRESHOLD,
+            blank_stddev=settings.QUALITY_BLANK_STDDEV,
+        )
+        if not q.ok:
+            return _all_needs_review(
+                expected,
+                note=f"image failed quality check ({q.reason}) — please upload a clearer photo",
+            )
+
+    # STAGE 2: extract, then let the (unchanged) matcher judge.
     result = extract_single(image_bytes)
     if result.ok:
         return run_matchers(expected, result.fields)

@@ -38,6 +38,11 @@ class Settings:
     # Access (optional, OFF by default).
     DEMO_PASSWORD: str = ""
 
+    # Pre-extraction image quality gate (cost guard + NFR-05).
+    QUALITY_GATE_ENABLED: bool = True
+    QUALITY_BLUR_THRESHOLD: float = 60.0
+    QUALITY_BLANK_STDDEV: float = 8.0
+
     def has_api_key(self) -> bool:
         """True if an API key is configured (never exposes the value)."""
         return bool(self.API_KEY.strip())
@@ -63,6 +68,14 @@ def _get_float(name: str, default: float) -> float:
         return default
 
 
+def _get_bool(name: str, default: bool) -> bool:
+    """Read a boolean env var. "0"/"false"/"no"/"" → False; anything else → True."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in ("", "0", "false", "no")
+
+
 def get_settings() -> Settings:
     """Return the process-wide :class:`Settings`, read from the environment.
 
@@ -82,4 +95,7 @@ def get_settings() -> Settings:
         MAX_UPLOAD_MB=_get_int("MAX_UPLOAD_MB", 10),
         SINGLE_LABEL_TIMEOUT_S=_get_float("SINGLE_LABEL_TIMEOUT_S", 5.0),
         DEMO_PASSWORD=_get("DEMO_PASSWORD", ""),
+        QUALITY_GATE_ENABLED=_get_bool("QUALITY_GATE_ENABLED", True),
+        QUALITY_BLUR_THRESHOLD=_get_float("QUALITY_BLUR_THRESHOLD", 60.0),
+        QUALITY_BLANK_STDDEV=_get_float("QUALITY_BLANK_STDDEV", 8.0),
     )

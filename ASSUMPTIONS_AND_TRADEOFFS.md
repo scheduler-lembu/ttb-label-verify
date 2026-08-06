@@ -48,6 +48,7 @@ limitation as we build, so the final README writeup is already done and every
 | D-12 | **Blank required field** | Empty required expected value → NEEDS_REVIEW (categorized), not PASS | Closes a false-PASS hole; makes the required flag meaningful | A little more review on incomplete entries | Form pre-validation; pull expected values from COLA |
 | D-13 | **Warning body strictness** | Exact characters incl. case (strict) | MR-04 says "character-for-character"; over-strict beats under-strict on the one exact field | Re-cased/reformatted-but-correct warnings FAIL (false-FAIL); visible + overridable | Same; optional case-insensitive body mode |
 | D-14 | **Review reason taxonomy** | Every result carries a machine-readable reason code | Lets agents triage/group reviews ("all blanks", by field) — efficiency for 47 agents, esp. batch | Small enum to maintain | Same + filterable review-queue UI |
+| D-15 | **Pre-extraction image quality gate** | Cheap OpenCV blur (Laplacian variance) + blank (std-dev) check; fail → NEEDS_REVIEW "request a better image" BEFORE any API call | Saves a paid call on unreadable uploads and mirrors the agent's real practice of asking for a better photo (NFR-05) | Heuristic thresholds; a borderline image may pass or be flagged | Tunable thresholds / a calibrated quality model |
 
 ---
 
@@ -123,6 +124,10 @@ limitation as we build, so the final README writeup is already done and every
     `GOVERNMENT WARNING` prefix is whitespace-normalized before the case
     comparison, so a correctly-capitalized prefix that wraps across lines is not
     false-failed. Case remains strict (title case fails).
+12. **The image quality gate is heuristic** (Laplacian-variance blur + std-dev
+    blank check) — a cheap pre-flight guard, not a calibrated image-quality
+    model; thresholds are config-tunable (QUALITY_BLUR_THRESHOLD /
+    QUALITY_BLANK_STDDEV).
 
 ---
 
