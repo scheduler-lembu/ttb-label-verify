@@ -51,8 +51,10 @@ EXPECTED_OVERALL = {
     "label_06_warning_titlecase.png": ResultState.FAIL,
     "label_07_warning_altered.png": ResultState.FAIL,
     "label_08_warning_missing.png": ResultState.NEEDS_REVIEW,
-    "label_09_warning_tiny.png": ResultState.PASS,
-    "label_10_degraded.png": ResultState.PASS,
+    # Imperfect-image labels: PASS (read cleanly) OR NEEDS_REVIEW (cross-check flags
+    # the tiny/rotated warning for a human) are BOTH acceptable outcomes (NFR-05).
+    "label_09_warning_tiny.png": frozenset({ResultState.PASS, ResultState.NEEDS_REVIEW}),
+    "label_10_degraded.png": frozenset({ResultState.PASS, ResultState.NEEDS_REVIEW}),
 }
 
 
@@ -98,13 +100,18 @@ def main() -> None:
         times.append(elapsed)
 
         exp_overall = EXPECTED_OVERALL.get(filename)
-        verdict_matches = exp_overall is None or result.overall == exp_overall
+        if isinstance(exp_overall, frozenset):
+            verdict_matches = result.overall in exp_overall
+            exp_label = " or ".join(sorted(s.value for s in exp_overall))
+        else:
+            verdict_matches = exp_overall is None or result.overall == exp_overall
+            exp_label = exp_overall.value if exp_overall else "-"
         matched += int(verdict_matches)
         flag = "MATCH " if verdict_matches else "DIFFERS"
 
         print(f"-- {filename}")
         print(f"   overall: {result.overall.value:12s} "
-              f"expected: {exp_overall.value if exp_overall else '-':12s} "
+              f"expected: {exp_label:24s} "
               f"[{flag}]   {elapsed:5.2f}s")
         for f in result.fields:
             print(f"      {f.field:18s} {f.verdict.value:12s} {f.reason.value}")

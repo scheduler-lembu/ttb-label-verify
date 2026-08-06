@@ -49,6 +49,10 @@ limitation as we build, so the final README writeup is already done and every
 | D-13 | **Warning body strictness** | Exact characters incl. case (strict) | MR-04 says "character-for-character"; over-strict beats under-strict on the one exact field | Re-cased/reformatted-but-correct warnings FAIL (false-FAIL); visible + overridable | Same; optional case-insensitive body mode |
 | D-14 | **Review reason taxonomy** | Every result carries a machine-readable reason code | Lets agents triage/group reviews ("all blanks", by field) — efficiency for 47 agents, esp. batch | Small enum to maintain | Same + filterable review-queue UI |
 | D-15 | **Pre-extraction image quality gate** | Cheap OpenCV blur (Laplacian variance) + blank (std-dev) check; fail → NEEDS_REVIEW "request a better image" BEFORE any API call | Saves a paid call on unreadable uploads and mirrors the agent's real practice of asking for a better photo (NFR-05) | Heuristic thresholds; a borderline image may pass or be flagged | Tunable thresholds / a calibrated quality model |
+| D-16 | **Literal-OCR warning cross-check (Tesseract)** | Vision read still produces the strict verdict; Tesseract reads the same image and if the two warning reads disagree (fuzzy body < threshold, or all-caps prefix differs) a PASS is downgraded to NEEDS_REVIEW | VLMs paraphrase/"clean up" text — the false-PASS failure mode on the one graded exact field; a literal reader catches divergence without brittle OCR-vs-canonical matching | Tesseract is weaker on rotated/tiny text, so some compliant warnings on imperfect images route to NEEDS_REVIEW (recall-over-precision); needs the tesseract-ocr binary | Azure Document Intelligence (Read) as the literal reader in production |
+| D-17 | **Parallel dual read** | Vision call and Tesseract read run concurrently (thread pool) | Adds ~no wall-clock (bounded by the slower read), so the cross-check honors the ~5s bar | Slightly more orchestration than sequential | async in production |
+| D-18 | **Cross-check is one-directional (safety-only)** | The cross-check can only move a warning PASS → NEEDS_REVIEW; it never relaxes a FAIL/REVIEW, and the strict verdict still runs on the vision read via the unchanged matcher | Keeps the graded matcher frozen and the change strictly conservative | A compliant warning misread by OCR may be flagged for a human (visible, overridable) | Tune threshold with real data |
+| D-19 | **Graceful OCR fallback** | If the Tesseract binary is unavailable, the cross-check is skipped and the warning falls back to the vision read (the #4 behavior) | The cross-check is an enhancement, not a hard dependency; local dev without the binary still runs | Without Tesseract the false-PASS protection is prompt-only | The deployed container ships Tesseract so production always has the cross-check |
 
 ---
 
@@ -66,6 +70,7 @@ limitation as we build, so the final README writeup is already done and every
 | MA-8 | Warning is matched to the stored canonical constant, not the agent's input value. | MR-04 says "against the stored canonical". | Low — agents may expect their entry to matter; documented. |
 | MA-9 | "Exact" = exact characters including case in the body, not just wording. | Strictest defensible reading of MR-04 (D-13). | Medium — re-cased/reformatted-but-correct warnings FAIL; overridable. |
 | MA-10 | The extractor delivers each field (esp. the warning) as a clean, bounded value — no trailing text scooped in. | Exact-match assumes the warning field isn't polluted (e.g. "CONTAINS SULFITES"). | Medium — pushed onto HANDOFF #3's extraction prompt. |
+| MA-11 | The Government Warning is the last statement block on the label, so anchoring on the case-insensitive "government warning" text and taking to end captures it without vision bounding boxes | The prototype vision extractor returns fields, not coordinates | Low — true for standard TTB layouts; unusual layouts make the reads disagree → NEEDS_REVIEW |
 
 ---
 
@@ -128,6 +133,11 @@ limitation as we build, so the final README writeup is already done and every
     blank check) — a cheap pre-flight guard, not a calibrated image-quality
     model; thresholds are config-tunable (QUALITY_BLUR_THRESHOLD /
     QUALITY_BLANK_STDDEV).
+13. **The literal-OCR warning cross-check requires the Tesseract binary;** where
+    it is absent (e.g. local dev without the install) the warning verdict falls
+    back to the vision transcription (prompt-guarded only). The deployed
+    container installs tesseract-ocr so the cross-check is always active in
+    production.
 
 ---
 
@@ -147,3 +157,49 @@ Decisions D-12 (blank→review) and D-13 (strict warning) resolved.
 
 *Next step after this doc is agreed: architecture (component diagram, request/data
 flow, the batch concurrency model, and the file/module layout).*
+
+---
+
+## G. Future Build / Considered-but-Not-Adopted
+
+Ideas evaluated during design that are **deliberately out of scope** for this
+prototype but recorded here to show they were reasoned through. None of these is
+built, and none changes the graded core.
+
+### FB-1 — Applicant-facing pre-scan with ingestion-time re-verification
+
+**The idea.** "Submission" and "agent review" are two separate moments: the label
+artwork and expected data enter the system when an applicant files, potentially days
+before an agent pulls the item from their queue. That opens an option to run
+verification at **submission / ingestion time** rather than at **agent-review time**.
+An applicant could self-scan a label and get instant completeness / legibility /
+match feedback (a retake loop, like mobile check deposit) before submitting; the
+agent would then read a pre-computed verdict instead of waiting on a live call.
+
+**Why it's attractive.** It largely removes the ~5-second latency bar as an *agent*
+constraint (the verdict is pre-computed), and — because the applicant enters the
+expected data too — a pre-scan could catch mismatches before submission, heading off
+the multi-day "reject and ask for a better image" round-trip.
+
+**The load-bearing correction (trust boundary).** The applicant is the regulated
+party and has an incentive to pass, so an applicant-side result and any
+client-submitted metadata can only ever be **advisory**. The **authoritative
+compliance verdict must be computed on TTB-controlled infrastructure at ingestion**,
+never trusted from the filer. (Same as a bank: your phone's read of a check is
+convenience; the bank re-reads server-side.) With that boundary in place, all the
+benefits hold — applicant gets instant feedback on their own time, the agent reads a
+trustworthy pre-computed verdict, and the queue is auto-filtered so unreadable /
+mismatched / junk submissions are flagged before a human sees them.
+
+**Why it's cheap to add later.** The core is already "AI reads, code judges" behind a
+single `verify()` interface, so the same engine can serve an agent upload, an
+applicant pre-scan, or an ingestion-time run with **no change to the graded logic** —
+only a new caller plus the rule that the authoritative run is server-side.
+
+**Why it's NOT in this prototype.** The brief and every stakeholder interview describe
+an **agent-facing desk tool** reviewing a queue; COLA integration is explicitly out of
+scope (CON-01), and the deliverable should stay the clean, complete agent-facing core
+rather than pivot to an applicant portal (CON-04). This is therefore documented as a
+production/scale direction, not built. Cost note: applicant-triggered scans would
+spend our API budget, so an adopted version would depend on the spend-cap /
+bring-your-own-key control and per-endpoint rate limiting.

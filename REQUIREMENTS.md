@@ -95,7 +95,12 @@ whitespace, then compared character-for-character to the canonical text; any
 wording change, omission, or a non-all-caps prefix returns FAIL. Whitespace
 variation *within the prefix* (a line break or extra spaces between GOVERNMENT and
 WARNING) does not by itself fail the all-caps check — only a genuine letter-case
-difference fails.
+difference fails. As an additional safeguard the prototype cross-checks the vision
+transcription of the warning against a literal OCR (Tesseract) read of the same
+image; if the two reads disagree on wording (beyond a fuzzy tolerance) or on the
+all-caps prefix, a warning that would otherwise PASS is routed to NEEDS_REVIEW. The
+strict character-for-character verdict itself is unchanged — the cross-check only
+makes a PASS more conservative, never a FAIL less so.
 
 **Note on MR-06:** exact text and all-caps checks (MR-04/05) work from OCR text
 alone and are **Must**. Bold-weight and font-size/"buried text" detection require

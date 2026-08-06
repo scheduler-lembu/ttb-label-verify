@@ -43,6 +43,10 @@ class Settings:
     QUALITY_BLUR_THRESHOLD: float = 60.0
     QUALITY_BLANK_STDDEV: float = 8.0
 
+    # Literal-OCR (Tesseract) warning cross-check.
+    WARNING_XCHECK_ENABLED: bool = True
+    WARNING_XCHECK_THRESHOLD: float = 90.0
+
     def has_api_key(self) -> bool:
         """True if an API key is configured (never exposes the value)."""
         return bool(self.API_KEY.strip())
@@ -98,4 +102,6 @@ def get_settings() -> Settings:
         QUALITY_GATE_ENABLED=_get_bool("QUALITY_GATE_ENABLED", True),
         QUALITY_BLUR_THRESHOLD=_get_float("QUALITY_BLUR_THRESHOLD", 60.0),
         QUALITY_BLANK_STDDEV=_get_float("QUALITY_BLANK_STDDEV", 8.0),
+        WARNING_XCHECK_ENABLED=_get_bool("WARNING_XCHECK_ENABLED", True),
+        WARNING_XCHECK_THRESHOLD=_get_float("WARNING_XCHECK_THRESHOLD", 90.0),
     )
