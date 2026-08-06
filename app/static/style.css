@@ -276,3 +276,38 @@ body {
 .review-details .detail-table { border: none; box-shadow: none; border-radius: 0; }
 .review-actions { display: flex; gap: 0.9rem; margin-top: 0.5rem; }
 .review-actions .btn { flex: 1 1 0; padding: 1rem 1.2rem; font-size: 1.15rem; }
+
+/* --- Record buckets (Approved/Cleared + Rejected) + searchable list --- */
+.records-section { margin-top: 1.5rem; }
+.records-title {
+  margin: 0 0 0.6rem; font-size: 0.85rem; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.record-buckets { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.9rem; }
+.record-card.record-cleared .icon { color: var(--pass-fg); }
+.record-card.record-cleared .bucket-count { color: var(--pass-fg); background: var(--pass-bg); }
+.record-card.record-rejected .icon { color: var(--fail-fg); }
+.record-card.record-rejected .bucket-count { color: var(--fail-fg); background: var(--fail-bg); }
+
+.list-title { font-size: var(--fs-h2); margin: 0 0 0.9rem; }
+.search-field {
+  display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;
+  padding: 0.15rem 0.85rem; background: var(--card);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow);
+}
+.search-field:focus-within { border-color: var(--accent); box-shadow: var(--focus); }
+.search-field .icon { flex: none; width: 1.2rem; height: 1.2rem; color: var(--muted); }
+.search-input {
+  flex: 1 1 auto; border: none; outline: none; background: transparent;
+  padding: 0.7rem 0; font-size: 1.05rem; font-family: inherit; color: var(--fg);
+}
+
+.record-list { display: flex; flex-direction: column; gap: 0.6rem; }
+.record-row {
+  padding: 0.9rem 1.15rem; background: var(--card);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow);
+}
+.record-row-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.record-row-name { font-weight: 700; font-size: 1.05rem; word-break: break-word; }
+.record-row-note { margin-top: 0.4rem; font-size: 0.9rem; color: var(--muted); }
+.record-empty { color: var(--muted); font-style: italic; padding: 0.5rem 0.15rem; }

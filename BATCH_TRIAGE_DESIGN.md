@@ -1,16 +1,18 @@
 # Batch Triage & Data-Source — Design Direction (Documented Target)
 ## TTB AI Label Verification Prototype — Working Document
 
-> **STATUS: IN BUILD — Phase 3 (exception-field triage) functionally complete, pending deploy.**
-> Buckets are now ONE PER FIELD: clean items auto-clear, and each field that needs a human is a bucket
-> whose closed card shows only its name + a live count. Clicking a bucket opens a focused, one-label-at-a-
-> time REVIEW SCREEN — a banner of what to check, the submitted photo (served to the browser), what the
-> application says for that field, a plain-language reason it was flagged, and **Approve / Reject** —
-> advancing until the bucket empties. **Approve is per-field** (clears the label from that bucket only);
-> **Reject is whole-application** (pulls the label from every bucket and records a "Rejected for / Please
-> check" rollup of all its flagged fields). A whole-label extractor failure collapses to a single
-> "Couldn't read the label" bucket. Disposition is session-only, in memory, no persistence (D-8 / CON-02).
-> Next: deploy.
+> **STATUS: IN BUILD — Phase 3 (exception-field triage + record buckets) advancing.**
+> There are now THREE kinds of bucket. **(1) Field-error buckets** — one per field that needs a human;
+> a closed card shows only name + count, and clicking it opens a focused, one-label-at-a-time REVIEW
+> SCREEN (banner of what to check, the submitted photo served to the browser, what the application says,
+> a plain-language reason, and **Approve / Reject**). **Approve is per-field** (clears the label from that
+> bucket only); **Reject is whole-application** (pulls it from every bucket and records a "Rejected for /
+> Please check" rollup). A whole-label extractor failure collapses to a single "Couldn't read the label"
+> bucket. **(2) A combined "Approved / Cleared" record bucket** holds decided applications — auto-cleared
+> on ingest and agent-approved — and **(3) a "Rejected" record bucket** holds rejects with their rollup.
+> Each record bucket opens a SEARCHABLE LIST (instant, case-insensitive over any field value), not the
+> review screen, and carries no Approve/Reject. All disposition is session-only, in memory, no persistence
+> (D-8 / CON-02). Next (#13b): a "Re-ingest" action + a navigable notification bell.
 
 ---
 
@@ -48,6 +50,12 @@ The target workflow:
 6. **Multi-flag labels appear in multiple buckets.** A label flagged on both brand and ABV
    sits in both buckets; approving it in one leaves it in the other, while rejecting it in
    one removes it from all.
+7. **Decided applications land in record buckets.** Beneath the field-error buckets sit two
+   record buckets: a combined **Approved / Cleared** (auto-cleared on ingest + agent-approved)
+   and **Rejected** (carrying the reject rollup). Each opens a **searchable list** — instant,
+   case-insensitive over any field value — rather than the review screen, and has no
+   Approve/Reject. This is where an agent finds a decided application after the fact and is
+   the foundation for the coming **Re-ingest** action and notification bell (#13b).
 
 ## 2. The single-label view is retained, not retired
 
