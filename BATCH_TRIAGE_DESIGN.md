@@ -39,8 +39,7 @@ need a human**.
 The target workflow:
 
 1. **Batch in.** An agent (or an ingestion job) submits many label + application pairs at
-   once — the peak-season importer dump of 200–300 that Janet in Seattle has been asking
-   about for years.
+   once — the peak-season importer dump of 200–300 labels described in the brief.
 2. **Clean items auto-clear.** Every pair runs through the existing pipeline
    ("AI reads, code judges"). Anything that comes back all-PASS drops out of the human's
    view — it is done. The agent never looks at the labels that were already right.

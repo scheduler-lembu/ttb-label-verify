@@ -1,118 +1,202 @@
-# **Take-Home Project: AI-Powered Alcohol Label Verification App**
+# TTB AI Label Verification — Prototype
 
-## **Project Background & Stakeholder Context**
+A web app that helps a TTB compliance agent verify an alcohol-beverage **label image**
+against its **application data**, returning a per-field **PASS / FAIL / NEEDS REVIEW**
+result with the extracted value shown next to the expected value. It is a standalone
+proof-of-concept: **no COLA integration and no real PII** — expected values are entered
+(single label) or uploaded as a CSV (batch), not fetched from any production system.
 
-*The following document contains notes from our discovery sessions with the Compliance Division, along with technical requirements for the prototype. We've included stakeholder feedback to give you context on how this tool will be used.*
+The guiding idea is **"AI reads, code judges"**: a vision model only *transcribes* the
+label into structured fields; every verdict is produced by deterministic Python so the
+results are repeatable, auditable, and explainable.
 
-### **Interview Notes: Sarah Chen, Deputy Director of Label Compliance**
+## Live demo
 
-*Conducted Tuesday, 3:15 PM — Sarah was running late from her daughter's school play rehearsal*
+Deployment target: **https://ttb-label-checker.fly.dev**
 
-"Thanks for meeting with me. Sorry about the delay—my daughter's playing the lead in her school's production of *Annie*next week and rehearsals have been crazy. Anyway, let me tell you about what we're dealing with here.
+This is the intended public demo URL for the Fly.io deployment. The app is containerized
+and the Fly app is created, but deployment is the immediately-following step — if the link
+does not respond yet, see [Deploy (Fly.io)](#deploy-flyio). Treat it as the demo/target
+URL, not a guarantee that it is currently live.
 
-So the TTB reviews about 150,000 label applications a year. Our team of 47 agents handles all of them. Back in the 80s—before my time—they actually had over 100 agents, but budget cuts, you know how it goes. We've been doing things basically the same way since the COLA system went online in 2003. That was a big upgrade from paper forms, believe it or not.
+## What it does
 
-The actual review process is pretty straightforward. An agent pulls up an application, looks at the label artwork, and checks that what's on the label matches what's in the application. Brand name matches? Check. ABV is correct? Check. Government warning is there? Check. It takes maybe 5-10 minutes per application for a simple one, longer if there are issues.
+- **Brand name** — normalized / fuzzy, case- and punctuation-insensitive (`STONE'S THROW`
+  matches `Stone's Throw`).
+- **Alcohol content** — ABV / proof equivalence (proof = 2 × ABV%), within a small
+  tolerance.
+- **Government Warning** — exact, character-for-character against the stored **27 CFR
+  16.21** canonical text (whitespace-normalized only), plus an **all-caps prefix** check
+  (`GOVERNMENT WARNING` must be all caps; title case fails).
+- **Supporting fields** — class/type, net contents, producer name/address, country of
+  origin (imports).
+- **Single-label and batch modes** — batch accepts a CSV plus label images; results
+  **stream in progressively** (SSE) so a reviewer can start on finished items before the
+  whole batch completes.
+- **Three-state results** — PASS / FAIL / NEEDS REVIEW, deliberately **biased against a
+  false PASS**, each carrying a machine-readable **reason code** (e.g. `mismatch`,
+  `blank_expected`, `borderline`, `special_character`, `warning_wording`) for triage.
 
-Here's the thing though—and this is what got leadership interested in AI—a lot of what we do is just... matching. Like literally just making sure the number on the form is the same as the number on the label. My agents spend half their day doing what's essentially data entry verification. It's not that they can't do more complex analysis, it's that they're drowning in routine stuff.
+## Approach
 
-Oh, I should mention—we tried a pilot with the scanning vendor last year. Disaster. The system would take 30, 40 seconds sometimes to process a single label. Our agents just went back to doing it by eye because they could do five labels in the time it took the machine to do one. **If we can't get results back in about 5 seconds, nobody's going to use it.** We learned that the hard way.
+- **AI reads, code judges.** The vision model transcribes the label into structured
+  fields; the deterministic matcher owns every PASS/FAIL/NEEDS_REVIEW. The AI is a
+  decision aid, never the decider.
+- **Three-state, safety-biased results.** When a field can't be read or confidently
+  judged, it becomes NEEDS_REVIEW rather than a guessed PASS or FAIL — a confident-but-wrong
+  PASS is the worst failure mode in compliance.
+- **Blind extraction.** The extractor is not told the expected values, so it can't be
+  nudged toward "matching" — it transcribes what's on the label; the matcher compares.
+- **Literal-OCR warning cross-check.** Because vision models tend to paraphrase text, the
+  warning region is *also* read with Tesseract; if the two reads disagree, a warning PASS
+  is downgraded to NEEDS_REVIEW. This is safety-only — it can never turn a FAIL into a PASS,
+  and it degrades gracefully (skips) if Tesseract isn't installed.
+- **Swappable extractor.** The extraction engine is selected by config (cloud vision for
+  the prototype); the documented production path swaps it for an in-tenant Azure endpoint,
+  which also clears the network/firewall constraint noted by TTB IT.
 
-What else... The agents really vary in their tech comfort level. Dave's been here since the Clinton administration and still prints his emails. Meanwhile, Jenny's fresh out of college and probably could have built this tool herself. We need something **my mother could figure out**—she's 73 and just learned to video call her grandkids last year, if that gives you a benchmark. Half our team is over 50. Clean, obvious, no hunting for buttons.
+## Tech stack / tools
 
-One more thing that came up in our last team meeting—during peak season, we get these big importers who dump 200, 300 label applications on us at once. Right now we literally have to process them one at a time. If there was some way to **handle batch uploads**, that would be huge. Janet from our Seattle office has been asking about this for years."
+- **Python 3.11+**, **FastAPI**, **Uvicorn** (ASGI).
+- **Vision extractor:** OpenAI GPT-5.6 family — `gpt-5.6-terra` (single label) and
+  `gpt-5.6-luna` (cheaper batch). Model IDs are **config values** (`.env` / `config.py`),
+  **not hardcoded** in logic.
+- **Tesseract** (`pytesseract`) for the literal Government-Warning cross-check (optional —
+  degrades gracefully if absent).
+- **rapidfuzz** for fuzzy field matching; **OpenCV** (`opencv-python-headless`) + **NumPy**
+  for the pre-extraction image quality gate; **Pillow** for image handling.
+- **SSE** (`sse-starlette`) for progressive batch streaming; **pandas** for the demo data
+  source.
+- **Docker** for the portable container; **Fly.io** as the demo host.
 
-### **Interview Notes: Marcus Williams, IT Systems Administrator**
+See `requirements.txt` for the full dependency list and `ARCHITECTURE.md` for the design.
 
-*Coffee chat, Thursday morning*
+## Setup & run (local)
 
-"Sarah probably gave you the business side. Let me fill you in on some of the technical landscape.
+**Prerequisites**
+- Python 3.11 or newer.
+- (Optional) **Tesseract OCR** for the literal warning cross-check. Without it the app
+  runs fine — the cross-check is simply skipped and the warning verdict falls back to the
+  vision read.
+- An OpenAI API key to run live extraction. The **test suite and the offline tools do not
+  need a key.**
 
-Our current infrastructure is... well, it's government infrastructure, let's leave it at that. We're on Azure now after the migration in 2019. That was a whole thing—don't get me started on the FedRAMP certification process. Took 18 months just for the paperwork.
-
-The COLA system is built on .NET, though there's been talk about modernizing it for years. We had a contractor come in last summer to do an assessment and they quoted us $4.2 million for a full rebuild. That went nowhere, obviously.
-
-For this prototype, we're not looking to integrate with COLA directly—that's a whole different beast with its own authorization requirements. Think of this as a standalone proof-of-concept that could potentially inform future procurement decisions. If it works well, maybe we look at how to incorporate it into the workflow. But that's years away, realistically.
-
-Security-wise, we'd need to be careful with any production deployment—there's PII considerations, document retention policies, the usual federal compliance stuff. But for a prototype? Just don't do anything crazy. We're not storing anything sensitive for this exercise.
-
-Oh, and our network blocks outbound traffic to a lot of domains, so keep that in mind if you're thinking about cloud APIs. During the scanning vendor pilot, half their features didn't work because our firewall blocked connections to their ML endpoints. Classic."
-
-### **Interview Notes: Dave Morrison, Senior Compliance Agent (28 years)**
-
-*Brief hallway conversation*
-
-"Look, I'll be honest, I've seen a lot of these 'modernization' projects come and go. Remember the automated phone system they put in back in 2008? Supposed to reduce call volume. We ended up with more calls because nobody could figure out how to navigate it.
-
-The thing about label review is there's nuance. You can't just pattern match everything. Like, I had one last week where the brand name was 'STONE'S THROW' on the label but 'Stone's Throw' in the application. Technically a mismatch? Sure. But it's obviously the same thing. You need judgment.
-
-That said, I'm not against new tools. If something can help me get through my queue faster, great. Just don't make my life harder in the process. I spend enough time fighting with COLA as it is."
-
-### **Interview Notes: Jenny Park, Junior Compliance Agent (8 months)**
-
-*Teams call, Friday afternoon*
-
-"I'm so excited you're working on this! When I started here, I was kind of shocked at how manual everything is. Like, I literally have a printed checklist on my desk that I go through for every label. Brand name—check with my eyes. ABV—check with my eyes. Warning statement—check with my eyes. It's 2024!
-
-The one thing I'd say is the warning statement check is actually trickier than it sounds. It has to be **exact**. Like, word-for-word, and the 'GOVERNMENT WARNING:' part has to be in all caps and bold. Sarah probably mentioned this but people try to get creative with the warning all the time. Smaller font, different wording, burying it in tiny text. I caught one last month where they used 'Government Warning' in title case instead of all caps. Rejected.
-
-Also—and this is maybe out of scope for a prototype—but it would be amazing if the tool could handle images that aren't perfectly shot. I've seen labels that are photographed at weird angles, or the lighting is bad, or there's glare on the bottle. Right now if an agent can't read the label they just reject it and ask for a better image. But if AI could handle some of that..."
-
-## **Technical Requirements**
-
-You are free to use any programming languages, frameworks, or libraries you prefer. We want to see what kind of engineering, design, and integration decisions you make.
-
-## **Additional Context**
-
-### **About TTB Label Requirements**
-
-For reference, TTB requires specific information on alcohol beverage labels. The exact requirements vary by beverage type (beer, wine, distilled spirits) but common elements include:
-
-- Brand name
-- Class/type designation
-- Alcohol content (with some exceptions for certain wine/beer)
-- Net contents
-- Name and address of bottler/producer
-- Country of origin for imports
-- **Government Health Warning Statement** (mandatory on all alcohol beverages)
-
-We encourage you to review TTB's guidelines at ttb.gov for additional context on label requirements.
-
-### **Sample Label**
-
-Your app should handle labels containing information like the example below:
-
-**Example Distilled Spirits Label Fields:**
-
-- Brand Name: "OLD TOM DISTILLERY"
-- Class/Type: "Kentucky Straight Bourbon Whiskey"
-- Alcohol Content: "45% Alc./Vol. (90 Proof)"
-- Net Contents: "750 mL"
-- Government Warning: \[Standard government warning text\]
-
-*We encourage you to create or source additional test labels—AI image generation tools work well for this.*
-
-## **Deliverables**
-
-1. **Source Code Repository** (GitHub or similar)
-   - All source code
-   - README with setup and run instructions
-   - Brief documentation of approach, tools used, assumptions made
-2. **Deployed Application URL**
-   - Working prototype we can access and test
-
-## **Evaluation Criteria**
-
-- Correctness and completeness of core requirements
-- Code quality and organization
-- Appropriate technical choices for the scope
-- User experience and error handling
-- Attention to requirements
-- Creative problem-solving
-
-We understand this is time-constrained. A working core application with clean code is preferred over ambitious but incomplete features. Document any trade-offs or limitations.
-
-*Questions? Reach out for clarification—though we also value how you fill in gaps independently.*
-
-Good luck!
+**Install**
+```bash
+pip install -r requirements.txt
 ```
+
+**Run the tests** (offline — no API key, no network):
+```bash
+pytest -q
+```
+The suite currently reports **101 passed**. It proves the deterministic matcher core
+(brand/ABV/warning/supporting rules, batch pairing, triage, quality gate) without any key.
+
+**Configure the API key**
+```bash
+cp .env.example .env
+# then edit .env and set:
+#   API_KEY=sk-...
+```
+The key variable is **`API_KEY`**. `.env` is **git-ignored** and must never be committed;
+model IDs and cost/concurrency knobs are also read from `.env` (see `.env.example` for every
+option and its default).
+
+**Run the web app**
+```bash
+uvicorn app.main:app --reload
+```
+Then open **http://127.0.0.1:8000** — the batch/triage app is the home page; the
+single-label page is at `/single`.
+
+**Regenerate the demo / test data and run the accuracy harness** (all offline except the
+last, which needs a key):
+```bash
+python tools/generate_demo_labels.py   # ~300 synthetic demo labels -> demo_labels/ + sample_data/demo_applications.csv
+python tools/generate_test_labels.py   # the graded 10-label adversarial catalog -> test_labels/ + sample_data/test_labels.csv
+python tools/run_catalog.py            # runs the catalog through the REAL pipeline (needs API_KEY); prints per-label verdicts vs TEST_PLAN + timings
+```
+
+## Batch input format
+
+Upload a CSV plus the label images. The CSV header is the field-registry keys:
+
+```
+image_filename,brand,alcohol_content,warning,class_type,net_contents,producer,country_of_origin
+```
+
+- Each row is paired to an image by **`image_filename`**, matched **case-insensitively** on
+  the basename (so `Label1.PNG` or `folder/label1.png` in the CSV pairs with an uploaded
+  `label1.png`). Extensions are not guessed, and two uploads that differ only by case are
+  reported as ambiguous rather than guessed.
+- A downloadable template is served at **`/template.csv`**.
+- The **`warning` column is informational** — the Government Warning is always checked
+  against the stored canonical 27 CFR text, not against a per-row value.
+- Unmatched rows/images, oversized images, and truncation (batches over the item cap) are
+  surfaced back to the user as pairing notices rather than silently dropped.
+
+## Deploy (Fly.io)
+
+The app ships as a Docker image (`Dockerfile`) and deploys to Fly.io as
+**`ttb-label-checker`** (`fly.toml`: internal port 8000, a `/health` check, scale-to-zero
+when idle). The OpenAI key is provided as a **Fly secret**, never baked into the image or
+committed:
+
+```bash
+fly secrets set API_KEY=sk-...
+fly deploy
+```
+
+The same container is designed to drop into TTB's Azure tenant for production
+(prototype → production is a config change of the extraction endpoint, not a rebuild).
+
+## Assumptions, trade-offs & limitations
+
+Honest highlights (full list in `ASSUMPTIONS_AND_TRADEOFFS.md`):
+
+- **Not production-hardened — by design.** No authentication, no persistence, no PII
+  handling, no audit log (CON-02); images are processed in memory and discarded.
+- **Cloud AI for the demo.** The documented production/network-restricted path is
+  Azure OpenAI / Azure Document Intelligence over an in-tenant private endpoint.
+- **Strict, character-for-character warning match.** Over-strict beats under-strict on the
+  one graded exact field: a correctly-worded but re-cased/reformatted warning can FAIL, but
+  it's shown with extracted-vs-canonical and is overridable.
+- **MR-06 font-size / "buried text" detection is DEFERRED and NOT implemented** (it's a
+  *Could*). The exact-text and all-caps-prefix checks (both *Must*) are done. A tiny warning
+  may still land in NEEDS_REVIEW *incidentally* when the literal-OCR cross-check disagrees —
+  but that is an OCR-disagreement signal, not a size measurement.
+- **Latency is a measured median, not an SLA.** ~2s median (≈1.8–4.4s) on the synthetic
+  test-label catalog, within the ~5s design target (NFR-01) — a target met on the test set,
+  not a hard per-request guarantee.
+- **English-only.** Non-ASCII / accented values are routed to a `special_character`
+  NEEDS_REVIEW rather than silently mis-matched.
+- **Batch is demo-grade.** Concurrent + streamed with a per-item size skip and an item cap;
+  there is a per-item upload cap but **no total-request memory cap** (a documented prototype
+  limit). Sustained high volume would need a queue/worker system.
+
+## Requirements & tests
+
+- **`REQUIREMENTS.md`** — the SRS: functional requirements (FR), matching rules (MR),
+  non-functional requirements (NFR), constraints, and traceability.
+- **`TEST_PLAN.md`** — a deliberately adversarial test-label catalog where each label proves
+  a specific requirement (exact/altered/omitted warning, title-case prefix, ABV equivalence,
+  tiny warning, degraded image, …).
+- The automated suite (`pytest -q`, **101 passed**) proves the matcher core **offline with
+  no API key**; `tools/run_catalog.py` exercises the full extraction+matching pipeline live.
+
+## Repository layout
+
+```
+app/            FastAPI app: routes/UI (main.py), extraction (extraction/), deterministic
+                matchers (matching/), verify orchestrator, quality gate, batch, triage, config
+tests/          Offline test suite (matcher core, batch pairing, triage, quality gate)
+tools/          Offline generators for the demo + graded catalogs, and the accuracy harness
+sample_data/    Expected-values CSVs and the batch template
+demo_labels/    ~300 synthetic demo label images (one-click demo batch)
+test_labels/    The graded 10-label adversarial catalog (TEST_PLAN)
+```
+
+More detail: `ARCHITECTURE.md` (components, request/data flow, batch concurrency),
+`ASSUMPTIONS_AND_TRADEOFFS.md` (every decision and its trade-off). The original take-home
+brief is preserved at `docs/PROJECT_BRIEF.md`.

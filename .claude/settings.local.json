@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(python -m py_compile app/*.py app/extraction/*.py app/matching/*.py tests/*.py)",
-      "Bash(python -m pip install -r requirements.txt)",
-      "Bash(python -m pytest -q)"
-    ]
-  }
-}

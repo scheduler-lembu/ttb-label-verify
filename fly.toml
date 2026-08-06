@@ -1,33 +1,30 @@
-# Fly.io deployment config for the TTB label verification prototype.
+# fly.toml app configuration file generated for ttb-label-checker on 2026-08-06T18:53:12-04:00
 #
-# NOT deployed in this pass — this file is prepared and validated locally only.
-# The app name below may need to be changed at launch (Fly requires a globally
-# unique name); the user picks the final name. The same container image also
-# targets TTB's Azure tenant for production (see ARCHITECTURE.md).
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
-# The API key is provided at deploy time as a Fly secret
-# (`fly secrets set API_KEY=...`) — never committed here or baked into the image.
 
-app = "ttb-label-verify"        # may need a different globally-unique name at launch
-primary_region = "iad"          # US East (Ashburn); change to a region near users
+app = 'ttb-label-checker'
+primary_region = 'iad'
 
 [build]
-  dockerfile = "Dockerfile"
+  dockerfile = 'Dockerfile'
 
 [http_service]
   internal_port = 8000
   force_https = true
-  auto_stop_machines = true
+  auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 0      # scale to zero when idle -> near-zero cost
+  min_machines_running = 0
 
   [[http_service.checks]]
-    grace_period = "10s"
-    interval = "30s"
-    method = "get"
-    path = "/health"
-    timeout = "5s"
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '10s'
+    method = 'get'
+    path = '/health'
 
 [[vm]]
-  memory = "1024mb"             # headroom for the retained in-memory jobs
-  cpus = 1                      # shared
+  memory = '1024mb'
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 1024

@@ -32,7 +32,7 @@ and drops into TTB's **existing Azure tenant** (Azure Container Apps / App Servi
 for Linux) for production. In production the cloud-vision call swaps — by
 **config, not by rewrite** — to **Azure OpenAI** or **Azure AI Document
 Intelligence** over a private endpoint, which also clears TTB's outbound-ML-endpoint
-firewall block (Marcus Williams's constraint). The prototype deliberately picks a
+firewall block (the network/IT constraint noted in the brief). The prototype deliberately picks a
 model with an **Azure twin** (the GPT-5.6 family — Terra single-label, Luna batch —
 runs both as a public API and inside Azure OpenAI) so prototype → production is a
 config change.
